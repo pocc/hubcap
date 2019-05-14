@@ -1,3 +1,2 @@
-// Download all files to a temporary filesystem
+// Package dl downloads all files to a temporary filesystem
 package dl
-
