@@ -1,5 +1,5 @@
-// Package dl gets links of pcaps to download
-package dl
+// Package html gets links of pcaps to download
+package html
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// Include any data in here that could be relevant to a pcap link
-type linkData struct {
-	link        string
-	description string
+// LinkData : All meta data for a pcap
+type LinkData struct {
+	Link        string
+	Description string
 }
 
 // Get the ASCII html from a URL
@@ -58,10 +58,18 @@ func getPlCapPages() []string {
 	return pageUrls
 }
 
-func getCaptureLinks(urls []string, linkReStr string) []linkData {
+// Wireshark bugzilla attachments are sequential, but not all are pcaps
+func getWsBugzillaPcaps() {
+	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
+	// <div class="details">M1_header_crc.pcapng (application/x-pcapng),432 bytes, created by
+	// `<div class=\"details\">[\s\S]*?\(application/([\s\S]*)`
+	fmt.Println("Does something!")
+}
+
+func getCaptureLinks(urls []string, linkReStr string) []LinkData {
 	// Get the download links of all available pcaps from URLs given regex
 	re := regexp.MustCompile(linkReStr)
-	var allLinks []linkData
+	var allLinks []LinkData
 
 	for _, url := range urls {
 		siteHTML, _ := getHTML(url)
@@ -82,16 +90,16 @@ func getCaptureLinks(urls []string, linkReStr string) []linkData {
 			// Sanitize description
 			noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
 			match[2] = noDescRe.ReplaceAllString(match[2], "")
-			allLinks = append(allLinks, linkData{match[1], match[2]})
+			allLinks = append(allLinks, LinkData{match[1], match[2]})
 		}
 	}
 	return allLinks
 }
 
 // GetAllLinks gets all of the pcap download links from various websites
-func GetAllLinks() {
-	var links []linkData
-	var newLinks []linkData
+func GetAllLinks() []LinkData {
+	var links []LinkData
+	var newLinks []LinkData
 
 	// From Packet Life (http://packetlife.net/captures/)
 	plPageUrls := getPlCapPages()
@@ -106,7 +114,5 @@ func GetAllLinks() {
 	newLinks = getCaptureLinks(wsSampleUrls, wsSampleRe)
 	links = append(links, newLinks...)
 
-	for _, link := range links {
-		fmt.Print(link.link, "\n\t", link.description, "\n")
-	}
+	return links
 }

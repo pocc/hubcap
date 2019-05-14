@@ -12,10 +12,11 @@ graph TD
     PL(Get Packet Life Links)
     WSS(Get WS Sample Links)
     WBD(WS Bug Database files)
-    DM(Data Multiplexer)
+    DM(Multiplex Link Data)
     end
 
     subgraph dl_files.go
+    IC{In Cache?}
     DLF(Download Files to TempDir)
     end
 
@@ -33,7 +34,9 @@ graph TD
     PL -- links + descriptions --> DM
     WSS -- links + descriptions --> DM
     WBD -- links + descriptions --> DM
-    DM -- links--> DLF
+    DM -- links--> IC
+    IC -- Not in Cache --> DLF
+    IC -- Use cached --> JPI
     DM --descriptions--> JPI
     DLF -- filepath list --> WSINT
     WSINT --pcap metadata--> JPI
@@ -44,8 +47,8 @@ graph TD
     linkStyle default interpolate monotoneX
     classDef done fill:#D4EFDF,stroke:#1B4F72;
     classDef doing fill:#FCF3CF,stroke:#1B4F72;
-    class PL done
-    class WSS doing
+    class PL,WSS,DM done
+    class DLF doing
 ```
 
 <!-- Backup
