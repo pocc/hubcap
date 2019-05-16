@@ -63,10 +63,10 @@ func getWsBugzillaPcaps() {
 	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
 	// <div class="details">M1_header_crc.pcapng (application/x-pcapng),432 bytes, created by
 	// `<div class=\"details\">[\s\S]*?\(application/([\s\S]*)`
-	fmt.Println("Does something!")
+	fmt.Println("This function is not implemented!")
 }
 
-func getCaptureLinks(urls []string, linkReStr string) []LinkData {
+func getCaptureLinks(baseURL string, urls []string, linkReStr string) []LinkData {
 	// Get the download links of all available pcaps from URLs given regex
 	re := regexp.MustCompile(linkReStr)
 	var allLinks []LinkData
@@ -75,13 +75,10 @@ func getCaptureLinks(urls []string, linkReStr string) []LinkData {
 		siteHTML, _ := getHTML(url)
 		linkMatches := re.FindAllStringSubmatch(siteHTML, -1)
 		// Get capture group match (partial link) and add it to link list
-		htmlRe := regexp.MustCompile(`(https?:\/\/[a-zA-Z0-9.-]*)`)
 		emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
 		for _, match := range linkMatches {
 			// If it is a relative path, add the base url before it
-			if strings.HasPrefix(match[1], "/") {
-				baseURLWithEntities := htmlRe.FindStringSubmatch(url)[1]
-				baseURL := html.UnescapeString(baseURLWithEntities)
+			if !strings.HasPrefix(match[1], "http") {
 				match[1] = baseURL + match[1]
 			}
 			if emptyRe.MatchString(match[2]) {
@@ -101,17 +98,19 @@ func GetAllLinks() []LinkData {
 	var links []LinkData
 	var newLinks []LinkData
 
-	// From Packet Life (http://packetlife.net/captures/)
+	// From Packet Life
+	plCapURL := "http://packetlife.net/captures/"
 	plPageUrls := getPlCapPages()
-	plRe := `<h3>(?P<name>.*?)<small>[\s\S]*?<p>(?P<desc>[\s\S]*?)</p>\s*`
-	newLinks = getCaptureLinks(plPageUrls, plRe)
+	plRe := `<h3>(?P<name>.*?)<small>[\s\S]*?<p>(?P<desc>[\s\S]*?\S)\s*</p>\s*`
+	newLinks = getCaptureLinks(plCapURL, plPageUrls, plRe)
 	links = append(links, newLinks...)
 
 	// From Wireshark Sample Captures, provided by the community
-	wsSampleUrls := []string{"https://wiki.wireshark.org/SampleCaptures"}
+	wsCapURL := "https://wiki.wireshark.org"
+	wsSampleUrls := []string{wsCapURL + "/SampleCaptures"}
 	// It looks like this HTML was written by hand (i.e. harder to use regex)
 	wsSampleRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
-	newLinks = getCaptureLinks(wsSampleUrls, wsSampleRe)
+	newLinks = getCaptureLinks(wsCapURL, wsSampleUrls, wsSampleRe)
 	links = append(links, newLinks...)
 
 	return links

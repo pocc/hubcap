@@ -15,33 +15,36 @@ import (
 	"os"
 	"sync"
 
-	"github.com/pocc/hubcap/dl"
+	// "github.com/pocc/hubcap/dl"
 	"github.com/pocc/hubcap/html"
-	"github.com/pocc/hubcap/pcap"
+	mm "github.com/pocc/hubcap/mutexmap"
+	// "github.com/pocc/hubcap/pcap"
 )
 
 func main() {
 	var wg sync.WaitGroup
-	resultJSON := make(map[string][]string)
+	resultJSON := mm.NewDS()
 
 	links := html.GetAllLinks()
 	wg.Add(len(links))
 	for _, link := range links {
-		go getPcapJSON(&link, resultJSON)
+		fmt.Println(link.Link)
+		go getPcapJSON(&link, resultJSON, &wg)
 	}
 	wg.Wait() // All goroutines MUST complete before writing results
-	writeJSON(resultJSON)
+	writeJSON(resultJSON.Cache)
 }
 
-func getPcapJSON(link *html.LinkData, result map[string][]string) {
-	filepath := dl.DownloadFile(link.Link)
-	pcapInfo := pcap.GetPcapInfo(filepath)
-	pcapName := "Temporary pcap name"
-	result[pcapName] = pcapInfo
+func getPcapJSON(link *html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
+	//filepath := dl.DownloadFile(link.Link)
+	pcapInfo := []string{link.Description}
+	pcapName := link.Link
+	result.Set(pcapName, pcapInfo)
+	wg.Done()
 }
 
 func writeJSON(resultJSON map[string][]string) {
-	file, err := json.MarshalIndent(resultJSON, "", "  ")
+	jsonStr, err := json.MarshalIndent(resultJSON, "", "  ")
 	if err != nil {
 		fmt.Println("Error in converting JSON:", err)
 		fmt.Println("JSON:", resultJSON)
@@ -51,7 +54,7 @@ func writeJSON(resultJSON map[string][]string) {
 		log.Fatal(err)
 	}
 	jsonPath := dir + "/.cache/captures.json"
-	err = ioutil.WriteFile(jsonPath, file, 0644)
+	err = ioutil.WriteFile(jsonPath, jsonStr, 0644)
 	if err != nil {
 		fmt.Println("Error in writing JSON to file:", err)
 		fmt.Println("Filepath:", jsonPath)

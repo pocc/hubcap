@@ -3,6 +3,6 @@ package pcap
 
 // GetPcapInfo : Get metadata about a pcap
 func GetPcapInfo(filepath string) []string {
-	var result []string
+	result := []string{"one", "two", "three"}
 	return result
 }

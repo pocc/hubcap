@@ -1,0 +1,16 @@
+# Install to .git/ with `pre-commit install`
+fail_fast: false
+
+repos:
+  - repo: https://github.com/prettier/prettier
+    rev: master
+    hooks:
+      - id: prettier
+        args: ["--write", "--prose-wrap", "always"]
+        additional_dependencies: [prettier]
+  - repo: https://github.com/troian/pre-commit-golang
+    rev: master
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-lint

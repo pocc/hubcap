@@ -3,5 +3,5 @@ package dl
 
 // DownloadFile : Download the file given the link
 func DownloadFile(link string) string {
-	return ""
+	return "Downloading to filepath"
 }
