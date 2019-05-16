@@ -28,14 +28,13 @@ func main() {
 	links := html.GetAllLinks()
 	wg.Add(len(links))
 	for _, link := range links {
-		fmt.Println(link.Link)
-		go getPcapJSON(&link, resultJSON, &wg)
+		go getPcapJSON(link, resultJSON, &wg)
 	}
 	wg.Wait() // All goroutines MUST complete before writing results
 	writeJSON(resultJSON.Cache)
 }
 
-func getPcapJSON(link *html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
+func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
 	//filepath := dl.DownloadFile(link.Link)
 	pcapInfo := []string{link.Description}
 	pcapName := link.Link

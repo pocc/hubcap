@@ -101,7 +101,7 @@ func GetAllLinks() []LinkData {
 	// From Packet Life
 	plCapURL := "http://packetlife.net/captures/"
 	plPageUrls := getPlCapPages()
-	plRe := `<h3>(?P<name>.*?)<small>[\s\S]*?<p>(?P<desc>[\s\S]*?\S)\s*</p>\s*`
+	plRe := `<h3>(?P<name>.*?\S)\s*<small>[\s\S]*?<p>(?P<desc>[\s\S]*?\S)\s*</p>\s*`
 	newLinks = getCaptureLinks(plCapURL, plPageUrls, plRe)
 	links = append(links, newLinks...)
 
