@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -18,15 +19,16 @@ type LinkData struct {
 }
 
 // Get the ASCII html from a URL
-func getHTML(url string) (string, error) {
-	resp, err := http.Get(url)
+func getHTML(pageURL string) (string, error) {
+	fmt.Println("Fetching HTML for page", pageURL)
+	resp, err := http.Get(pageURL)
 	if err != nil {
-		fmt.Println("ERROR: Failed to reach `" + url + "`")
+		fmt.Println("ERROR: Failed to reach `" + pageURL + "`")
 	}
 	defer resp.Body.Close()
 	siteHTML, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("ERROR: Failed to read html from `" + url + "`")
+		fmt.Println("ERROR: Failed to read html from `" + pageURL + "`")
 	}
 	retHTML := html.UnescapeString(string(siteHTML))
 	return retHTML, err
@@ -63,31 +65,34 @@ func getWsBugzillaPcaps() {
 	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
 	// <div class="details">M1_header_crc.pcapng (application/x-pcapng),432 bytes, created by
 	// `<div class=\"details\">[\s\S]*?\(application/([\s\S]*)`
-	fmt.Println("This function is not implemented!")
+	log.Fatal("This function is not implemented!")
 }
 
-func getCaptureLinks(baseURL string, urls []string, linkReStr string) []LinkData {
+func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []LinkData {
 	// Get the download links of all available pcaps from URLs given regex
-	re := regexp.MustCompile(linkReStr)
 	var allLinks []LinkData
 
-	for _, url := range urls {
-		siteHTML, _ := getHTML(url)
-		linkMatches := re.FindAllStringSubmatch(siteHTML, -1)
-		// Get capture group match (partial link) and add it to link list
-		emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
+	// Get capture group match (partial link) and add it to link list
+	emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
+	linkRe := regexp.MustCompile(linkReStr)
+	noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
+	for _, pageURL := range pageURLs {
+		siteHTML, _ := getHTML(pageURL)
+		linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
 		for _, match := range linkMatches {
 			// If it is a relative path, add the base url before it
-			if !strings.HasPrefix(match[1], "http") {
-				match[1] = baseURL + match[1]
+			link, desc := match[1], match[2]
+			if !strings.HasPrefix(link, "http") {
+				link = baseURL + link
 			}
 			if emptyRe.MatchString(match[2]) {
-				match[2] = "No Description"
+				desc = "No Description"
 			}
-			// Sanitize description
-			noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
-			match[2] = noDescRe.ReplaceAllString(match[2], "")
-			allLinks = append(allLinks, LinkData{match[1], match[2]})
+			// Sanitize link and description
+			link = strings.Replace(link, ",", "%2C", -1)
+			link = strings.Replace(link, " ", "%20", -1)
+			desc = noDescRe.ReplaceAllString(desc, "")
+			allLinks = append(allLinks, LinkData{link, desc})
 		}
 	}
 	return allLinks

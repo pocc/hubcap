@@ -35,8 +35,7 @@ func main() {
 }
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
-	filepath := dl.FetchFile(link.Link)
-	fmt.Println(filepath)
+	dl.FetchFile(link.Link)
 	pcapInfo := []string{link.Description}
 	pcapName := link.Link
 	result.Set(pcapName, pcapInfo)
