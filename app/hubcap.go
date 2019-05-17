@@ -15,7 +15,7 @@ import (
 	"os"
 	"sync"
 
-	// "github.com/pocc/hubcap/dl"
+	"github.com/pocc/hubcap/dl"
 	"github.com/pocc/hubcap/html"
 	mm "github.com/pocc/hubcap/mutexmap"
 	// "github.com/pocc/hubcap/pcap"
@@ -35,7 +35,8 @@ func main() {
 }
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
-	//filepath := dl.DownloadFile(link.Link)
+	filepath := dl.FetchFile(link.Link)
+	fmt.Println(filepath)
 	pcapInfo := []string{link.Description}
 	pcapName := link.Link
 	result.Set(pcapName, pcapInfo)
