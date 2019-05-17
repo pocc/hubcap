@@ -47,8 +47,8 @@ graph TD
     linkStyle default interpolate monotoneX
     classDef done fill:#D4EFDF,stroke:#1B4F72;
     classDef doing fill:#FCF3CF,stroke:#1B4F72;
-    class PL,WSS,DM done
-    class DLF doing
+    class PL,WSS,DM,IC,DLF done
+    class WSINT doing
 ```
 
 <!-- Backup
