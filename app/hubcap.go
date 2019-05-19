@@ -18,8 +18,16 @@ import (
 	"github.com/pocc/hubcap/dl"
 	"github.com/pocc/hubcap/html"
 	mm "github.com/pocc/hubcap/mutexmap"
-	// "github.com/pocc/hubcap/pcap"
+	"github.com/pocc/hubcap/pcap"
 )
+
+// PcapData stores info about an individual pcap
+type PcapData struct {
+	description string
+	//capinfos    pcap.CapinfosData
+	protocols []string
+	ports     map[string][]int
+}
 
 func main() {
 	var wg sync.WaitGroup
@@ -35,14 +43,19 @@ func main() {
 }
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
-	dl.FetchFile(link.Link)
+	pcapPath := dl.FetchFile(link.Link)
+	/*var pcapData  = PcapData(
+		link.Description,
+		pcap.GetPcapInfo(pcapPath)
+
+	)*/
 	pcapInfo := []string{link.Description}
-	pcapName := link.Link
-	result.Set(pcapName, pcapInfo)
+	var a struct{}
+	result.Set(link.Link, a)
 	wg.Done()
 }
 
-func writeJSON(resultJSON map[string][]string) {
+func writeJSON(resultJSON map[string]struct{}) {
 	jsonStr, err := json.MarshalIndent(resultJSON, "", "  ")
 	if err != nil {
 		fmt.Println("Error in converting JSON:", err)
