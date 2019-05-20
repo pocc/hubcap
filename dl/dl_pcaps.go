@@ -53,7 +53,7 @@ func downloadFile(url string, filepath string, retrySec int) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("INFO:", filepath, "not found. Downloading", url)
+	fmt.Println("\n\033[92mINFO\033[0m", filepath, "not found. Downloading", url)
 	switch resp.StatusCode {
 	case 302:
 		contextStr = "Redirection not implemented"
@@ -90,5 +90,7 @@ func downloadFile(url string, filepath string, retrySec int) error {
 		log.Fatal("Received unexpected code", resp.StatusCode,
 			"from", url, ". Please create an issue!")
 	}
-	return fmt.Errorf("Download failed with code %d. %s", resp.StatusCode, contextStr)
+	return fmt.Errorf("\033[93mWARN\033[0m "+
+		"Download of %s failed with code %d: %s. Skipping.",
+		url, resp.StatusCode, contextStr)
 }

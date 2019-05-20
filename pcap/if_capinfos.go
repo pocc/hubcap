@@ -11,7 +11,7 @@ import (
 )
 
 // GetCapinfos creates a json out of capinfos output
-func GetCapinfos(filename string) map[string]interface{} {
+func GetCapinfos(filename string) (map[string]interface{}, error) {
 	cmd := exec.Command("capinfos", "-M", filename)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -21,16 +21,13 @@ func GetCapinfos(filename string) map[string]interface{} {
 	err := cmd.Run()
 	if err != nil || !bytes.Equal(stderr.Bytes(), []byte("")) {
 		// This is not a fatal error because it's ok if some files are not read
-		fmt.Println("capinfos error reading file", filename,
-			"Go reported err:", err,
-			"\nSTDOUT:`"+string(stdout.Bytes())+"`",
-			"\nSTDERR:`"+string(stderr.Bytes())+"`")
+		capinfosErr := fmt.Errorf("\033[93mWARN\033[0m " + string(stderr.Bytes()))
 		errorResult := make(map[string]interface{})
 		errorResult[filename] = "File not found"
-		return errorResult
+		return errorResult, capinfosErr
 	}
 	ciJSON := capinfos2JSON(stdout.Bytes())
-	return JSON2Struct(ciJSON)
+	return JSON2Struct(ciJSON), nil
 }
 
 // JSON2Struct converts a capinfos struct to a JSON

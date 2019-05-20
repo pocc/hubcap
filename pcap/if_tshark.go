@@ -22,7 +22,7 @@ type tsharkInfo struct {
 }
 
 // GetTsharkInfo filters with the given filter and then applies fields
-func GetTsharkInfo(filename string, filter string, fields ...string) []byte {
+func GetTsharkInfo(filename string, filter string, fields ...string) ([]byte, error) {
 	cmdList := []string{"-T", "fields", "-Y", filter, "-E", "separator=|"}
 	for _, field := range fields {
 		cmdList = append(cmdList, "-e", field)
@@ -35,22 +35,27 @@ func GetTsharkInfo(filename string, filter string, fields ...string) []byte {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	err := cmd.Run()
-	if err != nil || stderr != nil {
-		// This is not a fatal error because it's ok if some files are not read
-		fmt.Println("tshark error reading file", filename,
-			"Go reported err:", err,
-			"\nSTDOUT", string(stdout.Bytes()),
-			"\nSTDERR:", string(stderr.Bytes()))
-		return []byte(err.Error())
+	if err != nil {
+		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m %s", err.Error())
+		return []byte(err.Error()), tsharkErr
 	}
-	return stdout.Bytes()
+	if len(stderr.Bytes()) > 0 {
+		// This is not a fatal error because it's ok if some files are not read
+		errorText := string(stderr.Bytes())
+		if errorText[0] == '\n' {
+			errorText = errorText[1:]
+		}
+		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m tshark: %s", errorText)
+		return stderr.Bytes(), tsharkErr
+	}
+	return stdout.Bytes(), nil
 }
 
 // GetProtoAndPortsJSON gets just frame.protocols, udp.port, tcp.port and returns a JSON
-func GetProtoAndPortsJSON(filename string) ([]string, map[string][]int) {
-	text := GetTsharkInfo(filename, "", "frame.protocols", "udp.port", "tcp.port")
+func GetProtoAndPortsJSON(filename string) ([]string, map[string][]int, error) {
+	text, err := GetTsharkInfo(filename, "", "frame.protocols", "udp.port", "tcp.port")
 	protocols, ports := parseProtoAndPorts(text)
-	return protocols, ports
+	return protocols, ports, err
 }
 
 // parseProtoAndPorts parses just frame.protocols, udp.port, tcp.port

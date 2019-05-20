@@ -19,25 +19,25 @@ type LinkData struct {
 }
 
 // Get the ASCII html from a URL
-func getHTML(pageURL string) (string, error) {
-	fmt.Println("INFO: Fetching HTML for page", pageURL)
+func getHTML(pageURL string) string {
+	fmt.Println("\033[92mINFO\033[0m Fetching HTML for page", pageURL)
 	resp, err := http.Get(pageURL)
 	if err != nil {
-		fmt.Println("ERROR: Failed to reach `" + pageURL + "`")
+		fmt.Println("ERROR: Failed to reach `"+pageURL+"`", err)
 	}
 	defer resp.Body.Close()
 	siteHTML, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("ERROR: Failed to read html from `" + pageURL + "`")
+		fmt.Println("ERROR: Failed to read html from `"+pageURL+"`", err)
 	}
 	retHTML := html.UnescapeString(string(siteHTML))
-	return retHTML, err
+	return retHTML
 }
 
 // Get the number of pages of captures at packetlife.net
 func getPlCapPages() []string {
 	baseURL := "http://packetlife.net"
-	captureHTML, _ := getHTML(baseURL + "/captures")
+	captureHTML := getHTML(baseURL + "/captures")
 	re := regexp.MustCompile(`\?page=(\d+)`)
 	pagePaths := re.FindAllStringSubmatch(captureHTML, -1)
 	highestPage := 0
@@ -77,7 +77,7 @@ func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []Link
 	linkRe := regexp.MustCompile(linkReStr)
 	noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
 	for _, pageURL := range pageURLs {
-		siteHTML, _ := getHTML(pageURL)
+		siteHTML := getHTML(pageURL)
 		linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
 		for _, match := range linkMatches {
 			// If it is a relative path, add the base url before it
