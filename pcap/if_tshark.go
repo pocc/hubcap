@@ -1,7 +1,9 @@
 package pcap
 
 import (
+	"fmt"
 	"log"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,30 +20,52 @@ type tsharkInfo struct {
 	udpDstPorts []int
 }
 
-/*
-func GetTsharkInfo(filename string, filter string, fields ...string) tsharkInfo {
-	tsharkText, err := exec.Command("tshark", "-r", "-T", "fields",
-		"-e", "frame.types", "-e", "tcp.ports", "-e", "udp.ports", filename).CombinedOutput()
-	if err != nil {
-		fmt.Println("ERROR: tshark could not read", filename, "\n", err)
+// GetTsharkInfo filters with the given filter and then applies fields
+func GetTsharkInfo(filename string, filter string, fields ...string) []byte {
+	cmdList := []string{"-T", "fields", "-Y", filter, "-E", "separator=|"}
+	for _, field := range fields {
+		cmdList = append(cmdList, "-e", field)
 	}
-	var result tsharkInfo
-	return result
-}*/
+	cmdList = append(cmdList, "-r", filename)
+	tsharkText, err := exec.Command("tshark", cmdList...).CombinedOutput()
+	if err != nil {
+		fmt.Println("ERROR: tshark could not read", filename,
+			"\nwith commands: tshark", cmdList,
+			"\nERROR:", err)
+	}
+	return tsharkText
+}
 
-func getTsharkInfo(text []byte) tsharkInfo {
-	/* This buffer parser is faster than and equivalent to these python regexes:
-	 */
-	var result tsharkInfo
+// GetProtoAndPortsJSON gets just frame.protocols, udp.port, tcp.port and returns a JSON
+func GetProtoAndPortsJSON(filename string) ([]string, map[string][]int) {
+	text := GetTsharkInfo(filename, "", "frame.protocols", "udp.port", "tcp.port")
+	protocols, ports := parseProtoAndPorts(text)
+	return protocols, ports
+}
+
+// parseProtoAndPorts parses just frame.protocols, udp.port, tcp.port
+func parseProtoAndPorts(text []byte) ([]string, map[string][]int) {
+	ports := make(map[string][]int)
 	protoRe := regexp.MustCompile(`(?:^|\n)(\S*?)\|(\d*?),?(\d*?)\|(\d*?),?(\d*?)`)
 	protoData := protoRe.FindAllStringSubmatch(string(text), -1)
-	result.protocols = uniqueProtocols(protoData[0])
-	result.tcpSrcPorts = uniquePorts(protoData[1])
-	result.tcpDstPorts = uniquePorts(protoData[2])
-	result.udpSrcPorts = uniquePorts(protoData[3])
-	result.udpDstPorts = uniquePorts(protoData[4])
-
-	return result
+	rotatedData := make([][]string, 5)
+	for i := 0; i < 5; i++ {
+		rotatedData[i] = make([]string, len(protoData))
+	}
+	for j, line := range protoData {
+		for i := 0; i < len(line)-1; i++ {
+			elem := line[i+1]
+			if elem != "" {
+				rotatedData[i][j] = elem
+			}
+		}
+	}
+	protocols := uniqueProtocols(rotatedData[0])
+	ports["tcpSrcPorts"] = uniquePorts(rotatedData[1])
+	ports["tcpDstPorts"] = uniquePorts(rotatedData[2])
+	ports["udpSrcPorts"] = uniquePorts(rotatedData[3])
+	ports["udpDstPorts"] = uniquePorts(rotatedData[4])
+	return protocols, ports
 }
 
 func uniqueProtocols(protocols []string) []string {
@@ -63,10 +87,10 @@ func uniquePorts(ports []string) []int {
 	uniques := make([]int, 0)
 	mapUniques := make(map[string]bool)
 	for _, port := range ports {
-		if !mapUniques[port] {
+		if !mapUniques[port] && port != "" {
 			uniqueInt, err := strconv.Atoi(port)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("ERROR:", err, "\nProblem converting port to int `"+port+"`")
 			}
 			uniques = append(uniques, uniqueInt)
 		}

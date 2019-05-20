@@ -24,9 +24,9 @@ import (
 // PcapData stores info about an individual pcap
 type PcapData struct {
 	description string
-	//capinfos    pcap.CapinfosData
-	protocols []string
-	ports     map[string][]int
+	capinfos    map[string]interface{}
+	protocols   []string
+	ports       map[string][]int
 }
 
 func main() {
@@ -44,18 +44,24 @@ func main() {
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
 	pcapPath := dl.FetchFile(link.Link)
-	/*var pcapData  = PcapData(
-		link.Description,
-		pcap.GetPcapInfo(pcapPath)
 
-	)*/
-	pcapInfo := []string{link.Description}
-	var a struct{}
-	result.Set(link.Link, a)
+	fmt.Println("Getting info from", link.Link)
+	description := link.Description
+	capinfos := pcap.GetCapinfos(pcapPath)
+	protocols, ports := pcap.GetProtoAndPortsJSON(pcapPath)
+
+	var thisPcap = PcapData{
+		description,
+		capinfos,
+		protocols,
+		ports,
+	}
+
+	result.Set(link.Link, thisPcap)
 	wg.Done()
 }
 
-func writeJSON(resultJSON map[string]struct{}) {
+func writeJSON(resultJSON map[string]interface{}) {
 	jsonStr, err := json.MarshalIndent(resultJSON, "", "  ")
 	if err != nil {
 		fmt.Println("Error in converting JSON:", err)
