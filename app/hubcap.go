@@ -43,9 +43,14 @@ func main() {
 }
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
-	pcapPath := dl.FetchFile(link.Link)
+	pcapPath, dlErr := dl.FetchFile(link.Link)
+	if dlErr != nil { // Skip local processing if file does not exist
+		fmt.Println("WARN:", dlErr.Error())
+		result.Set(link.Link, dlErr.Error())
+		wg.Done()
+	}
 
-	fmt.Println("Getting info from", link.Link)
+	fmt.Println("INFO: Processing", pcapPath)
 	description := link.Description
 	capinfos := pcap.GetCapinfos(pcapPath)
 	protocols, ports := pcap.GetProtoAndPortsJSON(pcapPath)

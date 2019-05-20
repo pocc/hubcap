@@ -1,6 +1,7 @@
 package pcap
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os/exec"
@@ -27,13 +28,22 @@ func GetTsharkInfo(filename string, filter string, fields ...string) []byte {
 		cmdList = append(cmdList, "-e", field)
 	}
 	cmdList = append(cmdList, "-r", filename)
-	tsharkText, err := exec.Command("tshark", cmdList...).CombinedOutput()
-	if err != nil {
-		fmt.Println("ERROR: tshark could not read", filename,
-			"\nwith commands: tshark", cmdList,
-			"\nERROR:", err)
+	cmd := exec.Command("tshark", cmdList...)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
+	if err != nil || stderr != nil {
+		// This is not a fatal error because it's ok if some files are not read
+		fmt.Println("tshark error reading file", filename,
+			"Go reported err:", err,
+			"\nSTDOUT", string(stdout.Bytes()),
+			"\nSTDERR:", string(stderr.Bytes()))
+		return []byte(err.Error())
 	}
-	return tsharkText
+	return stdout.Bytes()
 }
 
 // GetProtoAndPortsJSON gets just frame.protocols, udp.port, tcp.port and returns a JSON

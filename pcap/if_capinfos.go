@@ -19,10 +19,12 @@ func GetCapinfos(filename string) map[string]interface{} {
 	cmd.Stderr = stderr
 
 	err := cmd.Run()
-	if err != nil {
+	if err != nil || !bytes.Equal(stderr.Bytes(), []byte("")) {
 		// This is not a fatal error because it's ok if some files are not read
-		fmt.Println("WARN: capinfos could not read", filename, "\nERROR:", err,
-			"\nSTDERR:", string(stderr.Bytes()))
+		fmt.Println("capinfos error reading file", filename,
+			"Go reported err:", err,
+			"\nSTDOUT:`"+string(stdout.Bytes())+"`",
+			"\nSTDERR:`"+string(stderr.Bytes())+"`")
 		errorResult := make(map[string]interface{})
 		errorResult[filename] = "File not found"
 		return errorResult

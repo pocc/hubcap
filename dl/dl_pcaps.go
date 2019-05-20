@@ -13,13 +13,14 @@ import (
 )
 
 // FetchFile will get the filename from cache or download it
-func FetchFile(url string) string {
+func FetchFile(url string) (string, error) {
 	filepath := getFilepathFromURL(url)
-	_, fileDNE := os.Stat(filepath)
-	if fileDNE != nil {
-		downloadFile(url, filepath, 0)
+	_, err := os.Stat(filepath)
+	if err != nil {
+		dlErr := downloadFile(url, filepath, 0)
+		return filepath, dlErr
 	}
-	return filepath
+	return filepath, nil
 }
 
 // getFilepathFromURL does just that
@@ -42,25 +43,26 @@ func getFilepathFromURL(url string) string {
 }
 
 // downloadFile : Download the file given the link
-func downloadFile(url string, filepath string, retrySec int) {
+func downloadFile(url string, filepath string, retrySec int) error {
 	// Create the file
 	time.Sleep(time.Duration(retrySec) * time.Second)
+	var contextStr string
 
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Downloading", url)
+	fmt.Println("INFO:", filepath, "not found. Downloading", url)
 	switch resp.StatusCode {
 	case 302:
-		log.Fatal("Received 302 code. Redirection not implemented")
+		contextStr = "Redirection not implemented"
 	case 303:
-		log.Fatal("Received 303 code. Redirection not implemented")
+		contextStr = "Redirection not implemented"
 	case 404:
-		fmt.Println("ERROR: Download failed to", url, "with 404 resource not found")
+		contextStr = "Resource not found"
 	case 500: // Server error / file doesn't exist
-		fmt.Println("ERROR: Download failed to", url, "with server error 500")
+		contextStr = "Server error"
 	case 525: // 525 is cloudflare saying slow down
 		if retrySec < 32 {
 			retrySec := 2*retrySec + 1 // ~ f(n) = 2^(n+1)-1
@@ -68,8 +70,7 @@ func downloadFile(url string, filepath string, retrySec int) {
 				"\nRetrying after", retrySec, "seconds...")
 			downloadFile(url, filepath, retrySec)
 		} else {
-			fmt.Println("Download from", url, "failed with code", resp.StatusCode,
-				"\nHave retried 5 times and will not retry.")
+			contextStr = "Have retried 5 times and will not retry."
 		}
 	case 200:
 		// Write the body to file
@@ -89,4 +90,5 @@ func downloadFile(url string, filepath string, retrySec int) {
 		log.Fatal("Received unexpected code", resp.StatusCode,
 			"from", url, ". Please create an issue!")
 	}
+	return fmt.Errorf("Download failed with code %d. %s", resp.StatusCode, contextStr)
 }

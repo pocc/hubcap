@@ -20,7 +20,7 @@ type LinkData struct {
 
 // Get the ASCII html from a URL
 func getHTML(pageURL string) (string, error) {
-	fmt.Println("Fetching HTML for page", pageURL)
+	fmt.Println("INFO: Fetching HTML for page", pageURL)
 	resp, err := http.Get(pageURL)
 	if err != nil {
 		fmt.Println("ERROR: Failed to reach `" + pageURL + "`")
