@@ -50,13 +50,23 @@ func main() {
 }
 
 func getPcapJSON(link html.LinkData, result *mm.DataStore, wg *sync.WaitGroup) {
-	pcapPath, dlErr := dl.FetchFile(link.Link)
 	description := link.Description
+	pcapPath, dlErr := dl.FetchFile(link.Link)
 	if dlErr != nil { // Skip local processing if file does not exist
 		truncatedErr := firstLine(dlErr.Error())
 		var pcapInfo = map[string]string{
 			"Description":   description,
 			"DownloadError": truncatedErr,
+		}
+		endGC(link.Link, result, wg, pcapInfo)
+		return
+	}
+	pcapErr := pcap.IsPcap(pcapPath)
+	if pcapErr != nil {
+		fmt.Println(pcapErr.Error() + ". Skipping...")
+		var pcapInfo = map[string]string{
+			"Description":   description,
+			"DownloadError": pcapErr.Error(),
 		}
 		endGC(link.Link, result, wg, pcapInfo)
 		return
@@ -98,11 +108,12 @@ func firstLine(errText string) string {
 	if line[len(line)-1] == '\n' { // remove newline at end
 		line = line[:len(line)-1]
 	}
-	line = append(line, '.', '.')
 	two80CharLines := 160
 	truncateLength := two80CharLines
 	if len(line) < truncateLength {
 		truncateLength = len(line)
+	} else {
+		line = append(line, '.', '.') // If truncating, add an ellipsis
 	}
 	lineStr := string(line[:truncateLength])
 	fmt.Println(lineStr)

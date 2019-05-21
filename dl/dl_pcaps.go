@@ -91,6 +91,6 @@ func downloadFile(url string, filepath string, retrySec int) error {
 			"from", url, ". Please create an issue!")
 	}
 	return fmt.Errorf("\033[93mWARN\033[0m "+
-		"Download of %s failed with code %d: %s. Skipping.",
+		"Download of %s failed with code %d: %s. Skipping...",
 		url, resp.StatusCode, contextStr)
 }
