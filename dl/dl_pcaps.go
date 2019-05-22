@@ -74,7 +74,7 @@ func downloadFile(url string, filepath string, retrySec int) error {
 		}
 	case 200:
 		// Write the body to file
-		fmt.Println("Saving to", filepath)
+		fmt.Println("\033[92mINFO\033[0m Saving to", filepath)
 		out, err := os.Create(filepath)
 		if err != nil {
 			log.Fatal(err)
