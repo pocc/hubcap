@@ -1,3 +1,4 @@
+// Package mutexmap is a mutex map that can be used as a data store
 package mutexmap
 
 import (

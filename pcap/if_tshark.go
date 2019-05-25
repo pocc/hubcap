@@ -51,8 +51,8 @@ func GetTsharkInfo(filename string, filter string, fields ...string) ([]byte, er
 	return stdout.Bytes(), nil
 }
 
-// GetProtoAndPortsJSON gets just frame.protocols, udp.port, tcp.port and returns a JSON
-func GetProtoAndPortsJSON(filename string) ([]string, map[string][]int, error) {
+// GetTsharkJSON gets just frame.protocols, udp.port, tcp.port and returns a JSON
+func GetTsharkJSON(filename string) ([]string, map[string][]int, error) {
 	text, err := GetTsharkInfo(filename, "", "frame.protocols", "udp.port", "tcp.port")
 	protocols, ports := parseProtoAndPorts(text)
 	return protocols, ports, err
