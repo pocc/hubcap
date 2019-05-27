@@ -10,8 +10,7 @@ import (
 
 // Test downloading a file that should succeed and test downloading a file from a url that does not exist
 func Test_downloadFile(t *testing.T) {
-	wiresharkBase := "https://wiki.wireshark.org/SampleCaptures?action=AttachFile&do=get&target="
-	testFile := "homeplug_request_parameters_and_statistics.pcap"
+	wiresharkFile := "https://wiki.wireshark.org/SampleCaptures?action=AttachFile&do=get&target=a.pcap"
 	type args struct {
 		url      string
 		filepath string
@@ -22,8 +21,8 @@ func Test_downloadFile(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{"small pcap", args{wiresharkBase + testFile, testFile, 0}, false},
-		{"Non existant file", args{wiresharkBase + "a.pcap", "a.pcap", 0}, true},
+		// Download file is tested by FetchFile lacking the file in cache
+		{"Non existant file", args{wiresharkFile, "a.pcap", 0}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
