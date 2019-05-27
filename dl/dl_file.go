@@ -7,44 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 )
 
-// FetchFile will get the filename from cache or download it
-func FetchFile(url string) (string, error) {
-	fPath := getFilepathFromURL(url)
-	fileFd, _ := os.Stat(fPath)
-	pcapExists := fileFd != nil
-	if !pcapExists {
-		if fetchErr := downloadFile(url, fPath, 0); fetchErr != nil {
-			return fPath, fetchErr
-		}
-	}
-	return fPath, nil
-}
-
-// GetFilepathFromURL does just that
-func getFilepathFromURL(url string) string {
-	fileRe := regexp.MustCompile(`[^=\\\/\|\?\*:'"<>]+$`) // exclude symbols we don't care about
-	filename := fileRe.FindString(url)
-	sanitizedFilename := strings.Replace(filename, " ", "_", -1)
-	var source string
-	if strings.Contains(url, "wireshark.org") {
-		source = "ws"
-	} else if strings.Contains(url, "packetlife.net") {
-		source = "pl"
-	}
-	thisDir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	filepath := thisDir + "/.cache/" + source + "_" + sanitizedFilename
-	return filepath
-}
-
-// downloadFile : Download the file given the link
 func downloadFile(url string, filepath string, retrySec int) error {
 	// Create the file
 	time.Sleep(time.Duration(retrySec) * time.Second)
