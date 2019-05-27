@@ -1,7 +1,12 @@
+// +build slow
+
 // Package dl downloads all files to a temporary filesystem
 package dl
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestFetchFile(t *testing.T) {
 	type args struct {
@@ -49,7 +54,9 @@ func Test_getFilepathFromURL(t *testing.T) {
 	}
 }
 
+// Test downloading a file that should succeed and test downloading a file from a url that does not exist
 func Test_downloadFile(t *testing.T) {
+	testFile := "homeplug_request_parameters_and_statistics.pcap"
 	type args struct {
 		url      string
 		filepath string
@@ -60,7 +67,12 @@ func Test_downloadFile(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{"small pcap",
+			args{"https://wiki.wireshark.org/SampleCaptures?action=AttachFile&do=get&target=homeplug_request_parameters_and_statistics.pcap", testFile, 0},
+			false},
+		{"Non existant file",
+			args{"https://wiki.wireshark.org/SampleCaptures?action=AttachFile&do=get&target=a.pcap", "a.pcap", 0},
+			true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,5 +80,9 @@ func Test_downloadFile(t *testing.T) {
 				t.Errorf("downloadFile() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+	err := os.Remove(testFile)
+	if err != nil {
+		t.Errorf("Problem deleting test file %s", testFile)
 	}
 }
