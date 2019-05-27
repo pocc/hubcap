@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // LinkData : All meta data for a pcap
@@ -19,7 +20,7 @@ type LinkData struct {
 }
 
 // Get the ASCII html from a URL
-func getHTML(pageURL string) string {
+func getHTML(pageURL string, htmlChan chan<- string) {
 	fmt.Println("\033[92mINFO\033[0m Fetching HTML for page", pageURL)
 	resp, err := http.Get(pageURL)
 	if err != nil {
@@ -30,14 +31,15 @@ func getHTML(pageURL string) string {
 	if err != nil {
 		fmt.Println("ERROR: Failed to read html from `"+pageURL+"`", err)
 	}
-	retHTML := html.UnescapeString(string(siteHTML))
-	return retHTML
+	htmlChan <- html.UnescapeString(string(siteHTML))
 }
 
-// Get the number of pages of captures at packetlife.net
+// Get the number of pages of captures at packetlife.net by looking at HTML
 func getPlCapPages() []string {
 	baseURL := "http://packetlife.net"
-	captureHTML := getHTML(baseURL + "/captures")
+	htmlChan := make(chan string)
+	go getHTML(baseURL+"/captures", htmlChan)
+	captureHTML := <-htmlChan
 	re := regexp.MustCompile(`\?page=(\d+)`)
 	pagePaths := re.FindAllStringSubmatch(captureHTML, -1)
 	highestPage := 0
@@ -71,13 +73,15 @@ func getWsBugzillaPcaps() {
 func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []LinkData {
 	// Get the download links of all available pcaps from URLs given regex
 	var allLinks []LinkData
+	htmlChan := make(chan string)
 
 	// Get capture group match (partial link) and add it to link list
 	emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
 	linkRe := regexp.MustCompile(linkReStr)
 	noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
 	for _, pageURL := range pageURLs {
-		siteHTML := getHTML(pageURL)
+		go getHTML(pageURL, htmlChan)
+		siteHTML := <-htmlChan
 		linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
 		for _, match := range linkMatches {
 			// If it is a relative path, add the base url before it
@@ -102,6 +106,7 @@ func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []Link
 func GetAllLinks() []LinkData {
 	var links []LinkData
 	var newLinks []LinkData
+	start := time.Now()
 
 	// From Packet Life
 	plCapURL := "http://packetlife.net/captures/"
@@ -118,5 +123,7 @@ func GetAllLinks() []LinkData {
 	newLinks = getCaptureLinks(wsCapURL, wsSampleUrls, wsSampleRe)
 	links = append(links, newLinks...)
 
+	numPages := len(plPageUrls) + len(wsSampleUrls)
+	fmt.Printf("-> Fetched %d pages containing %d links in %s", numPages, len(links), time.Since(start))
 	return links
 }
