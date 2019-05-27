@@ -1,8 +1,11 @@
 package dl
 
 import (
+	"os"
 	"reflect"
 	"testing"
+
+	"github.com/mholt/archiver"
 )
 
 func TestUnarchivePcaps(t *testing.T) {
@@ -15,7 +18,8 @@ func TestUnarchivePcaps(t *testing.T) {
 		want    []string
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{"Non-archive should fail", args{".gitignore"}, nil, true},
+		{"Actual archive should return with filenames", args{"../test/files/empty.tar.gz"}, []string{"empty", "empty2"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -28,6 +32,12 @@ func TestUnarchivePcaps(t *testing.T) {
 				t.Errorf("UnarchivePcaps() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+	// Recreate archive for tests. Note that empty.tar.gz is just 2 touched empty files
+	archiver.Archive([]string{"../test/files/empty/empty", "../test/files/empty/empty2"}, "../test/files/empty.tar.gz")
+	err := os.RemoveAll("../test/files/empty")
+	if err != nil {
+		t.Error("Error deleting test directory ../test/files/empty\n")
 	}
 }
 
