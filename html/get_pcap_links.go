@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,7 +21,7 @@ type LinkData struct {
 }
 
 // Get the ASCII html from a URL
-func getHTML(pageURL string, htmlChan chan<- string) {
+func getHTML(pageURL string, htmlChan chan<- string, wg *sync.WaitGroup) {
 	fmt.Println("\033[92mINFO\033[0m Fetching HTML for page", pageURL)
 	resp, err := http.Get(pageURL)
 	if err != nil {
@@ -32,13 +33,15 @@ func getHTML(pageURL string, htmlChan chan<- string) {
 		fmt.Println("ERROR: Failed to read html from `"+pageURL+"`", err)
 	}
 	htmlChan <- html.UnescapeString(string(siteHTML))
+	wg.Done()
 }
 
 // Get the number of pages of captures at packetlife.net by looking at HTML
-func getPlCapPages() []string {
+func getPlCapPages(wg *sync.WaitGroup) []string {
 	baseURL := "http://packetlife.net"
 	htmlChan := make(chan string)
-	go getHTML(baseURL+"/captures", htmlChan)
+	wg.Add(1)
+	go getHTML(baseURL+"/captures", htmlChan, wg)
 	captureHTML := <-htmlChan
 	re := regexp.MustCompile(`\?page=(\d+)`)
 	pagePaths := re.FindAllStringSubmatch(captureHTML, -1)
@@ -70,7 +73,7 @@ func getWsBugzillaPcaps() {
 	log.Fatal("This function is not implemented!")
 }
 
-func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []LinkData {
+func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string, wg *sync.WaitGroup) []LinkData {
 	// Get the download links of all available pcaps from URLs given regex
 	var allLinks []LinkData
 	htmlChan := make(chan string)
@@ -80,7 +83,8 @@ func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []Link
 	linkRe := regexp.MustCompile(linkReStr)
 	noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
 	for _, pageURL := range pageURLs {
-		go getHTML(pageURL, htmlChan)
+		wg.Add(1)
+		go getHTML(pageURL, htmlChan, wg)
 		siteHTML := <-htmlChan
 		linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
 		for _, match := range linkMatches {
@@ -106,13 +110,14 @@ func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string) []Link
 func GetAllLinks() []LinkData {
 	var links []LinkData
 	var newLinks []LinkData
+	var wg sync.WaitGroup
 	start := time.Now()
 
 	// From Packet Life
 	plCapURL := "http://packetlife.net/captures/"
-	plPageUrls := getPlCapPages()
+	plPageUrls := getPlCapPages(&wg)
 	plRe := `<h3>(?P<name>.*?\S)\s*<small>[\s\S]*?<p>(?P<desc>[\s\S]*?\S)\s*</p>\s*`
-	newLinks = getCaptureLinks(plCapURL, plPageUrls, plRe)
+	newLinks = getCaptureLinks(plCapURL, plPageUrls, plRe, &wg)
 	links = append(links, newLinks...)
 
 	// From Wireshark Sample Captures, provided by the community
@@ -120,10 +125,11 @@ func GetAllLinks() []LinkData {
 	wsSampleUrls := []string{wsCapURL + "/SampleCaptures"}
 	// It looks like this HTML was written by hand (i.e. harder to use regex)
 	wsSampleRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
-	newLinks = getCaptureLinks(wsCapURL, wsSampleUrls, wsSampleRe)
+	newLinks = getCaptureLinks(wsCapURL, wsSampleUrls, wsSampleRe, &wg)
 	links = append(links, newLinks...)
 
+	wg.Wait()
 	numPages := len(plPageUrls) + len(wsSampleUrls)
-	fmt.Printf("-> Fetched %d pages containing %d links in %s", numPages, len(links), time.Since(start))
+	fmt.Printf("-> Fetched %d pages containing %d links in %s\n", numPages, len(links), time.Since(start))
 	return links
 }
