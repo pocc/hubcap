@@ -20,7 +20,7 @@ func downloadFile(url string, filepath string, retrySec int) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("\n\033[92mINFO\033[0m", filepath, "not found. Downloading", url)
+	fmt.Println("\n\033[92mINFO\033[0m", filepath, "not found in cache. Downloading", url)
 	switch resp.StatusCode {
 	case 302:
 		contextStr = "Redirection not implemented"

@@ -19,6 +19,7 @@ func FetchFile(urlStr string) (string, error) {
 	fileFd, _ := os.Stat(fPath)
 	pcapExists := fileFd != nil
 	if !pcapExists {
+		fmt.Println("\n\033[92mINFO\033[0m", fPath, "not found in cache. Downloading", urlStr)
 		if fetchErr := downloadFile(urlStr, fPath, 0); fetchErr != nil {
 			return fPath, fetchErr
 		}
