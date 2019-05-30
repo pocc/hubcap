@@ -58,7 +58,6 @@ func Test_getFilepathFromURL(t *testing.T) {
 		wantErr bool
 	}{
 		{"Typical pcap", args{wiresharkBase + testFile}, baseFileStr + "ws_" + testFile, false},
-		{"Archive", args{wiresharkBase + "iwarp_connect.tar.gz"}, baseFileStr + "ws_iwarp_connect", false},
 		{"Bad URL", args{""}, "", true},
 	}
 	for _, tt := range tests {

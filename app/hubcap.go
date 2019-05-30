@@ -63,26 +63,24 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
 		archiveName := dl.StripArchiveExt(pi.Filename)
-		// _, archiveDNE := ioutil.ReadDir(archiveName)
-		if archiveName == pi.Filename { /*&& archiveDNE != nil {
-				var files []string
-				files, pi.Error = dl.UnarchivePcaps(pi.Filename)
-				if pi.Error != nil {
-					fmt.Println(pi.Error)
-				}
-				for _, filename := range files {
-					pi.Filename = ".cache/unarchived/" + filename
-					wg.Add(1)
-					go getPcapInfo(&pi, result, wg)
-					wg.Done()
-				}
-			} else */
+		if archiveName != pi.Filename {
+			var files []string
+			files, pi.Error = dl.UnarchivePcaps(pi.Filename)
+			if pi.Error != nil {
+				fmt.Println(pi.Error)
+			}
+			for _, extractedName := range files {
+				pi.Filename = archiveName + "/" + extractedName
+				wg.Add(1)
+				go getPcapInfo(&pi, result, wg)
+				wg.Done()
+			}
+		} else {
 			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
 		}
-	} /*else {
-		fmt.Println(pi.Error)
-
-	}*/
+	} else {
+		fmt.Println(twoLines(pi.Error))
+	}
 }
 
 func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
@@ -94,27 +92,26 @@ func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
 		}
 	}
 	if pi.Error != nil {
-		pi.Error = firstLine(pi.Error)
+		fmt.Println(twoLines(pi.Error))
 	}
 	result.Set(pi.Filename, pi)
 }
 
-func firstLine(err error) error {
+// Gets the first 1000 chars or two lines of error
+func twoLines(err error) error {
 	errBuf := bytes.NewBufferString(err.Error())
 	line, _ := errBuf.ReadBytes('\n')
+	if errBuf.Len() > 0 {
+		line2, _ := errBuf.ReadBytes('\n')
+		line = append(line, line2...)
+	}
 	if line[len(line)-1] == '\n' { // remove newline at end
 		line = line[:len(line)-1]
 	}
-	two80CharLines := 160
-	truncateLength := two80CharLines
-	if len(line) < truncateLength {
-		truncateLength = len(line)
-	} else {
-		line = append(line, '.', '.') // If truncating, add an ellipsis
+	if len(line) > 1000 {
+		line = line[:1000]
 	}
-	lineStr := string(line[:truncateLength])
-	fmt.Println(lineStr)
-	return fmt.Errorf(lineStr)
+	return fmt.Errorf("%s", line)
 }
 
 // Warn and end the current goroutine

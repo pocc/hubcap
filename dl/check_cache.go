@@ -10,16 +10,23 @@ import (
 	"strings"
 )
 
-// FetchFile will get the filename from cache or download it
+// FetchFile will get the filename from cache or download it. If the file is
+// an archive, then check whether an extracted folder of the same name exists.
 func FetchFile(urlStr string) (string, error) {
 	fPath, err := getFilepathFromURL(urlStr)
 	if err != nil {
 		return "", fmt.Errorf("Invalid url %s passed in", urlStr)
 	}
-	fileFd, _ := os.Stat(fPath)
-	pcapExists := fileFd != nil
-	if !pcapExists {
-		fmt.Println("\n\033[92mINFO\033[0m", fPath, "not found in cache. Downloading", urlStr)
+	// Using a blacklist because users are sloppy with how they name valid pcaps
+	notPcapRe := regexp.MustCompile(`\.(?:doc|ext|log|json|mib|mp3|p10|pdf|pppd|trc|txt|txt.gz|xls|xlsx|xml)$`)
+	if notPcapRe.FindString(fPath) != "" {
+		return fPath, fmt.Errorf("\033[92mINFO\033[0m Skipping download of non-pcap file %s from %s", fPath, urlStr)
+	}
+	// If file path or target archive extracted folder does not exist
+	archiveStr := StripArchiveExt(fPath)
+	_, archiveErr := os.Stat(archiveStr)
+	if os.IsNotExist(archiveErr) {
+		fmt.Println("\033[92mINFO\033[0m", fPath, "not found in cache. Downloading", urlStr)
 		fetchErr := downloadFile(urlStr, fPath, 0)
 		if fetchErr != nil {
 			return fPath, fetchErr
@@ -29,7 +36,6 @@ func FetchFile(urlStr string) (string, error) {
 }
 
 // GetFilepathFromURL returns the expected full path of a downloaded file based on a url.
-// If it is an archive, it returns the full unarchived folder path (e.g. minus ``.tgz`).
 func getFilepathFromURL(urlStr string) (string, error) {
 	if _, err := url.ParseRequestURI(urlStr); err != nil {
 		return "", err
@@ -45,8 +51,7 @@ func getFilepathFromURL(urlStr string) (string, error) {
 	fileRe := regexp.MustCompile(`[^=\\\/\|\?\*:'"<>]+$`) // exclude symbols we don't care about
 	filename := fileRe.FindString(urlStr)
 	// Unarchived pcaps are expected to be in to extracted folder, not in the archive
-	sanitizedFilename := StripArchiveExt(filename)
-	sanitizedFilename = strings.Replace(sanitizedFilename, " ", "_", -1)
+	sanitizedFilename := strings.Replace(filename, " ", "_", -1)
 	relativeDir := "/.cache/"
 	var sourceSite string
 	if strings.Contains(urlStr, "wireshark.org") {

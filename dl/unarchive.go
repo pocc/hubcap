@@ -16,6 +16,9 @@ func UnarchivePcaps(archived string) ([]string, error) {
 	if folderName == archived {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Unarchive called for nonarchive %s", archived)
 	}
+	if err := os.MkdirAll(folderName, 0744); err != nil {
+		return nil, fmt.Errorf("\033[91mERROR\033[0m Cannot create folder %s to extract files to. Got error: %s", folderName, err)
+	}
 	archiveErr := archiver.Unarchive(archived, folderName)
 	if archiveErr != nil {
 		return nil, fmt.Errorf("\033[93mWARN\033[0m Problem with archive %s.\nError: %s", archived, archiveErr)
@@ -38,7 +41,7 @@ func UnarchivePcaps(archived string) ([]string, error) {
 
 // StripArchiveExt removes archive extensions `.tar.gz` and `.bz2` or returns filename otherwise
 func StripArchiveExt(fPath string) string {
-	archiveRe := regexp.MustCompile(`(.*?)(?:\.p?cap)?\.(?:n?tar\.gz|bz2|zip|xz|lzma|rar|tbz2|tgz|ntar|tar)$`)
+	archiveRe := regexp.MustCompile(`(.*?)\.(?:n?tar\.gz|bz2|lzma|ntar|rar|tbz2|tgz|tar|xz|zip)$`)
 	archiveMatches := archiveRe.FindStringSubmatch(fPath)
 	if len(archiveMatches) == 2 {
 		return archiveMatches[1]
