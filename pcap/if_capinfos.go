@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"log"
+	"os"
 	"os/exec"
 	"testing"
 )
@@ -36,7 +36,7 @@ func JSON2Struct(text []byte) map[string]interface{} {
 	err := json.Unmarshal(text, &pcapInfo)
 	if err != nil {
 		fmt.Println("Failed to structify", string(text), "\nERROR:", err)
-		log.Fatal(err)
+		os.Exit(1)
 	}
 	return pcapInfo
 }
@@ -77,7 +77,8 @@ func capinfos2JSON(text []byte) []byte {
 						result = append(result[:len(result)-9], '"', ':', '[', '"')
 						readingEncap = true
 					default:
-						log.Fatal("Unknown interface:", string(result))
+						fmt.Println("Unknown interface:", string(result))
+						os.Exit(1)
 					}
 				}
 				index = skipSpaces(index+1, text)

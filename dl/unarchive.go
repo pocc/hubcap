@@ -4,34 +4,32 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/mholt/archiver"
 )
 
 // UnarchivePcaps will unarchive pcaps from archive f to a folder of the same name before removing f
-func UnarchivePcaps(f string) ([]string, error) {
-	fmt.Printf("\033[92mINFO\033[0m Unarchiving %s\n", f)
-	folderName := StripArchiveExt(f)
-	if folderName == f {
-		return nil, fmt.Errorf("\033[91mERROR\033[0m Unarchive called for nonarchive %s", f)
+func UnarchivePcaps(archived string) ([]string, error) {
+	fmt.Printf("\033[92mINFO\033[0m Unarchiving %s\n", archived)
+	folderName := StripArchiveExt(archived)
+	folderName = filepath.Dir(folderName) + "/unarchived/" + filepath.Base(folderName)
+	if folderName == archived {
+		return nil, fmt.Errorf("\033[91mERROR\033[0m Unarchive called for nonarchive %s", archived)
 	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem getting current working directory")
-	}
-	fullFolderName := dir + "/" + folderName
-	archiveErr := archiver.Unarchive(f, fullFolderName)
+	archiveErr := archiver.Unarchive(archived, folderName)
 	if archiveErr != nil {
-		return nil, fmt.Errorf("\033[93mWARN\033[0m Unrecognized archive %s.\nError: %s", f, archiveErr)
+		return nil, fmt.Errorf("\033[93mWARN\033[0m Problem with archive %s.\nError: %s", archived, archiveErr)
 	}
-	delErr := os.Remove(f)
+	delErr := os.Remove(archived)
 	if delErr != nil {
-		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem deleting archive `%s` (Do you have permissions?).\nERROR: %s", f, delErr)
+		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem deleting archive `%s` "+
+			"(Do you have permissions?).\nERROR: %s", archived, delErr)
 	}
-	files, err := ioutil.ReadDir(fullFolderName)
+	files, err := ioutil.ReadDir(folderName)
 	if err != nil {
-		return nil, fmt.Errorf("\033[91mERROR\033[0m Could not read archive directory %s", fullFolderName)
+		return nil, fmt.Errorf("\033[91mERROR\033[0m Could not read archive directory %s", folderName)
 	}
 	newFiles := make([]string, len(files))
 	for i, file := range files {

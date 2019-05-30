@@ -4,7 +4,6 @@ package dl
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -18,9 +17,8 @@ func downloadFile(url string, filepath string, retrySec int) error {
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	fmt.Println("\n\033[92mINFO\033[0m", filepath, "not found in cache. Downloading", url)
 	switch resp.StatusCode {
 	case 302:
 		contextStr = "Redirection not implemented"
@@ -32,8 +30,8 @@ func downloadFile(url string, filepath string, retrySec int) error {
 		contextStr = "Server error"
 	case 525: // 525 is cloudflare saying slow down
 		if retrySec < 32 {
-			retrySec := 2*retrySec + 1 // ~ f(n) = 2^(n+1)-1
-			fmt.Println("Download from", url, "failed with code", resp.StatusCode,
+			retrySec = 2*retrySec + 1 // ~ f(n) = 2^(n+1)-1
+			fmt.Println("\033[93mWARN\033[0m Download from", url, "failed with code", resp.StatusCode,
 				"\nRetrying after", retrySec, "seconds...")
 			downloadFile(url, filepath, retrySec)
 		} else {
@@ -44,19 +42,19 @@ func downloadFile(url string, filepath string, retrySec int) error {
 		fmt.Println("\033[92mINFO\033[0m Saving to", filepath)
 		out, err := os.Create(filepath)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		defer out.Close()
 
 		_, err = io.Copy(out, resp.Body)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		resp.Body.Close()
 		return nil
 	default:
-		log.Fatal("Received unexpected code", resp.StatusCode,
-			"from", url, ". Please create an issue!")
+		return fmt.Errorf("Received unexpected code %d from %s. "+
+			"Please create an issue", resp.StatusCode, url)
 	}
 	return fmt.Errorf("\033[93mWARN\033[0m "+
 		"Download of %s failed with code %d: %s. Skipping...",

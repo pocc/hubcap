@@ -1,4 +1,6 @@
 debug
 _gen/
 .vscode
-.cache/
+# Exclude .cache contents, but not folder
+!.cache/
+.cache/*

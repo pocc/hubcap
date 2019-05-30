@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"html"
 	"io/ioutil"
-	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,7 +70,8 @@ func getWsBugzillaPcaps() {
 	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
 	// <div class="details">M1_header_crc.pcapng (application/x-pcapng),432 bytes, created by
 	// `<div class=\"details\">[\s\S]*?\(application/([\s\S]*)`
-	log.Fatal("This function is not implemented!")
+	fmt.Println("This function is not implemented!")
+	os.Exit(1)
 }
 
 func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string, wg *sync.WaitGroup) []LinkData {

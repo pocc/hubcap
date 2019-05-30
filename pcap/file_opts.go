@@ -4,7 +4,6 @@ package pcap
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os/exec"
 )
 
@@ -15,7 +14,7 @@ func IsPcap(filepath string) error {
 	cmd.Stdout = stdout
 	err := cmd.Run()
 	if err != nil {
-		log.Fatal("\033[91mERROR\033[0m captype failed: ", err, " when parsing filepath ", filepath)
+		return fmt.Errorf("\033[91mERROR\033[0m captype failed: %s when parsing filepath %s", err, filepath)
 	}
 	// capinfos output like `/path/to/file.pcap: pcap\n`
 	stdout.ReadBytes(' ')

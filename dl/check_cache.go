@@ -20,7 +20,8 @@ func FetchFile(urlStr string) (string, error) {
 	pcapExists := fileFd != nil
 	if !pcapExists {
 		fmt.Println("\n\033[92mINFO\033[0m", fPath, "not found in cache. Downloading", urlStr)
-		if fetchErr := downloadFile(urlStr, fPath, 0); fetchErr != nil {
+		fetchErr := downloadFile(urlStr, fPath, 0)
+		if fetchErr != nil {
 			return fPath, fetchErr
 		}
 	}
@@ -43,13 +44,14 @@ func getFilepathFromURL(urlStr string) (string, error) {
 	}
 	fileRe := regexp.MustCompile(`[^=\\\/\|\?\*:'"<>]+$`) // exclude symbols we don't care about
 	filename := fileRe.FindString(urlStr)
-	sanitizedFilename := StripArchiveExt(strings.Replace(filename, " ", "_", -1))
-	var source string
+	sanitizedFilename := strings.Replace(strings.Replace(filename, " ", "_", -1), "ntar", "tar", -1)
+	relativeDir := "/.cache/"
+	var sourceSite string
 	if strings.Contains(urlStr, "wireshark.org") {
-		source = "ws"
+		sourceSite = "ws"
 	} else if strings.Contains(urlStr, "packetlife.net") {
-		source = "pl"
+		sourceSite = "pl"
 	}
-	filepath := thisDir + "/.cache/" + source + "_" + sanitizedFilename
+	filepath := thisDir + relativeDir + sourceSite + "_" + sanitizedFilename
 	return filepath, nil
 }

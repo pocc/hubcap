@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -27,7 +26,6 @@ import (
 // PcapInfo stores info about an individual pcap
 type PcapInfo struct {
 	Filename    string
-	Link        string
 	Description string
 	Capinfos    map[string]interface{}
 	Protocols   []string
@@ -35,108 +33,74 @@ type PcapInfo struct {
 	Error       error
 }
 
-// PI = PcapInfo shortened
-type PI PcapInfo
-
 func main() {
 	var wg sync.WaitGroup
-	var filename string
-
 	resultJSON := mutexmap.NewDS()
-	filenameCh := make(chan PI)
-	archiveCh := make(chan PI)
-	pcapCh := make(chan PI)
-	jsonWriteCh := make(chan PI)
+
+	// If .cache and .cache/archive folders does not exist, create them
+	if err := os.MkdirAll(".cache/unarchived", 0722); err != nil {
+		fmt.Printf("Unable to create cache folders")
+		os.Exit(1)
+	}
 
 	links := html.GetAllLinks()
+	wg.Add(len(links))
 	for _, link := range links {
 		// Limit to 100 goroutines at a time
 		for runtime.NumGoroutine() > 100 {
 			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
-		wg.Add(1)
-		/* Pipelining all data with channels
-		 *
-		 * Link -> Filename ------> IsPcap? -> Capinfos -> Write JSON
-		 *              ⤷ Unarchive ⤴  ⤷-> tshark info -⤴
-		 *
-		 *     Skip to Write JSON if error as it should include partial data
-		 */
-		go getFilename(link, filenameCh, archiveCh, jsonWriteCh)
-		select {
-		case archive := <-archiveCh: // Unarchive and get info on each file inside
-			go unArchive(archive, filenameCh, jsonWriteCh)
-		case filename := <-filenameCh:
-			go isPcap(filename, pcapCh, jsonWriteCh)
-		case pcap := <-pcapCh:
-			go getPcapInfo(pcap, jsonWriteCh)
-		case jsonObj := <-jsonWriteCh:
-			go resultJSON.Set(filename, jsonObj)
-		}
+		go getPcapJSON(link, resultJSON, &wg)
 		wg.Done()
 	}
+	fmt.Println("Waiting for all goroutines to finish...")
 	wg.Wait() // All goroutines MUST complete before writing results
-	close(pcapCh)
 	writeJSON(resultJSON.Cache)
 }
 
-func getFilename(link html.LinkData, filenameCh chan PI, archiveCh chan PI, jsonWrite chan PI) {
-	var pi = PI{Description: link.Description}
-	var err error
-	pi.Filename, err = dl.FetchFile(link.Link)
-	archiveName := dl.StripArchiveExt(pi.Filename)
-	switch {
-	case err != nil:
-		jsonWrite <- pi
-	case archiveName != pi.Filename:
-		pi.Filename = archiveName
-		archiveCh <- pi
-	default:
-		filenameCh <- pi
-	}
+func getPcapJSON(link html.LinkData, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+	pi := PcapInfo{Description: link.Description}
+	pi.Filename, pi.Error = dl.FetchFile(link.Link)
+	if pi.Error == nil {
+		archiveName := dl.StripArchiveExt(pi.Filename)
+		// _, archiveDNE := ioutil.ReadDir(archiveName)
+		if archiveName == pi.Filename { /*&& archiveDNE != nil {
+				var files []string
+				files, pi.Error = dl.UnarchivePcaps(pi.Filename)
+				if pi.Error != nil {
+					fmt.Println(pi.Error)
+				}
+				for _, filename := range files {
+					pi.Filename = ".cache/unarchived/" + filename
+					wg.Add(1)
+					go getPcapInfo(&pi, result, wg)
+					wg.Done()
+				}
+			} else */
+			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
+		}
+	} /*else {
+		fmt.Println(pi.Error)
+
+	}*/
 }
 
-func unArchive(pi PI, filenameCh chan PI, jsonWrite chan PI) {
-	files, err := dl.UnarchivePcaps(pi.Filename)
-	if err != nil {
-		pi.Error = err
-		jsonWrite <- pi
-	} else {
-		for _, f := range files {
-			pi.Filename = f
-			filenameCh <- pi
+func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+	pi.Error = pcap.IsPcap(pi.Filename)
+	if pi.Error == nil {
+		pi.Capinfos, pi.Error = pcap.GetCapinfos(pi.Filename)
+		if pi.Error == nil {
+			pi.Protocols, pi.Ports, pi.Error = pcap.GetTsharkJSON(pi.Filename)
 		}
 	}
-}
-
-func isPcap(pi PI, pcapCh chan PI, jsonWrite chan PI) {
-	err := pcap.IsPcap(pi.Filename)
-	if err != nil {
-		pi.Error = err
-		jsonWrite <- pi
-	} else {
-		pcapCh <- pi
+	if pi.Error != nil {
+		pi.Error = firstLine(pi.Error)
 	}
+	result.Set(pi.Filename, pi)
 }
 
-func getPcapInfo(pi PI, jsonWrite chan PI) {
-	var err error
-	pi.Capinfos, err = pcap.GetCapinfos(pi.Filename)
-	if err != nil {
-		pi.Error = err
-	} else {
-		pi.Protocols, pi.Ports, err = pcap.GetTsharkJSON(pi.Filename)
-		if err != nil {
-			pi.Error = err
-		}
-	}
-	jsonWrite <- pi
-}
-
-// firstLine truncates an error to the first 160 chars
 func firstLine(err error) error {
-	errText := err.Error()
-	errBuf := bytes.NewBufferString(errText)
+	errBuf := bytes.NewBufferString(err.Error())
 	line, _ := errBuf.ReadBytes('\n')
 	if line[len(line)-1] == '\n' { // remove newline at end
 		line = line[:len(line)-1]
@@ -148,9 +112,15 @@ func firstLine(err error) error {
 	} else {
 		line = append(line, '.', '.') // If truncating, add an ellipsis
 	}
-	errLines := fmt.Errorf("%s", line[:truncateLength])
-	fmt.Println(errLines)
-	return errLines
+	lineStr := string(line[:truncateLength])
+	fmt.Println(lineStr)
+	return fmt.Errorf(lineStr)
+}
+
+// Warn and end the current goroutine
+func endGC(url string, result *mutexmap.DataStore, wg *sync.WaitGroup, values interface{}) {
+	result.Set(url, values)
+	wg.Done()
 }
 
 func writeJSON(resultJSON map[string]interface{}) {
@@ -161,7 +131,8 @@ func writeJSON(resultJSON map[string]interface{}) {
 	}
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Could not read current directory", err)
+		os.Exit(1)
 	}
 	jsonPath := dir + "/.cache/captures.json"
 	err = ioutil.WriteFile(jsonPath, jsonBytes, 0644)

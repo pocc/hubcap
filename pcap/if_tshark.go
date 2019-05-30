@@ -3,7 +3,7 @@ package pcap
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -105,7 +105,8 @@ func uniquePorts(ports []string) []int {
 		if !mapUniques[port] && port != "" {
 			uniqueInt, err := strconv.Atoi(port)
 			if err != nil {
-				log.Fatal("ERROR:", err, "\nProblem converting port to int `"+port+"`")
+				fmt.Println("ERROR:", err, "\nProblem converting port to int `"+port+"`")
+				os.Exit(1)
 			}
 			uniques = append(uniques, uniqueInt)
 		}
