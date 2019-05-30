@@ -34,8 +34,8 @@ func TestUnarchivePcaps(t *testing.T) {
 		})
 	}
 	// Recreate archive for tests. Note that empty.tar.gz is just 2 touched empty files
-	archiver.Archive([]string{"../test/files/unarchived/empty/empty", "../test/files/unarchived/empty/empty2"}, "../test/files/empty.tar.gz")
-	err := os.RemoveAll("../test/files/unarchived")
+	archiver.Archive([]string{"../test/files/empty/empty", "../test/files/empty/empty2"}, "../test/files/empty.tar.gz")
+	err := os.RemoveAll("../test/files/empty")
 	if err != nil {
 		t.Error("Error deleting test directory ../test/files/empty\n")
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"regexp"
 
 	"github.com/mholt/archiver"
@@ -14,7 +13,6 @@ import (
 func UnarchivePcaps(archived string) ([]string, error) {
 	fmt.Printf("\033[92mINFO\033[0m Unarchiving %s\n", archived)
 	folderName := StripArchiveExt(archived)
-	folderName = filepath.Dir(folderName) + "/unarchived/" + filepath.Base(folderName)
 	if folderName == archived {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Unarchive called for nonarchive %s", archived)
 	}

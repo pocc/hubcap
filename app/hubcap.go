@@ -45,12 +45,12 @@ func main() {
 
 	links := html.GetAllLinks()
 	wg.Add(len(links))
-	for _, link := range links {
+	for link, desc := range links {
 		// Limit to 100 goroutines at a time
 		for runtime.NumGoroutine() > 100 {
 			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
-		go getPcapJSON(link, resultJSON, &wg)
+		go getPcapJSON(link, desc, resultJSON, &wg)
 		wg.Done()
 	}
 	fmt.Println("Waiting for all goroutines to finish...")
@@ -58,9 +58,9 @@ func main() {
 	writeJSON(resultJSON.Cache)
 }
 
-func getPcapJSON(link html.LinkData, result *mutexmap.DataStore, wg *sync.WaitGroup) {
-	pi := PcapInfo{Description: link.Description}
-	pi.Filename, pi.Error = dl.FetchFile(link.Link)
+func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+	pi := PcapInfo{Description: desc}
+	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
 		archiveName := dl.StripArchiveExt(pi.Filename)
 		// _, archiveDNE := ioutil.ReadDir(archiveName)

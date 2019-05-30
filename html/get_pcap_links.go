@@ -74,43 +74,41 @@ func getWsBugzillaPcaps() {
 	os.Exit(1)
 }
 
-func getCaptureLinks(baseURL string, pageURLs []string, linkReStr string, wg *sync.WaitGroup) []LinkData {
+// addCaptureLinks adds links to the links map
+func addCaptureLinks(baseURL string, pageURL string, allLinks map[string]string, linkReStr string, wg *sync.WaitGroup) {
 	// Get the download links of all available pcaps from URLs given regex
-	var allLinks []LinkData
 	htmlChan := make(chan string)
 
 	// Get capture group match (partial link) and add it to link list
 	emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
 	linkRe := regexp.MustCompile(linkReStr)
-	noDescRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
-	for _, pageURL := range pageURLs {
-		wg.Add(1)
-		go getHTML(pageURL, htmlChan, wg)
-		siteHTML := <-htmlChan
-		linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
-		for _, match := range linkMatches {
-			// If it is a relative path, add the base url before it
-			link, desc := match[1], match[2]
-			if !strings.HasPrefix(link, "http") {
-				link = baseURL + link
-			}
-			if emptyRe.MatchString(match[2]) {
-				desc = "No Description"
-			}
-			// Sanitize link and description
-			link = strings.Replace(link, ",", "%2C", -1)
-			link = strings.Replace(link, " ", "%20", -1)
-			desc = noDescRe.ReplaceAllString(desc, "")
-			allLinks = append(allLinks, LinkData{link, desc})
+	noDescTitleRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
+	wg.Add(1)
+	go getHTML(pageURL, htmlChan, wg)
+	siteHTML := <-htmlChan
+	linkMatches := linkRe.FindAllStringSubmatch(siteHTML, -1)
+	for _, match := range linkMatches {
+		// If it is a relative path, add the base url before it
+		link, desc := match[1], match[2]
+		if !strings.HasPrefix(link, "http") {
+			link = baseURL + link
 		}
+		if emptyRe.MatchString(match[2]) {
+			desc = "No Description"
+		}
+		// Sanitize link and description
+		link = strings.Replace(link, ",", "%2C", -1)
+		link = strings.Replace(link, " ", "%20", -1)
+		// Some links are to view the download instead of getting it
+		link = strings.Replace(link, "&do=view", "&do=get", -1)
+		desc = noDescTitleRe.ReplaceAllString(desc, "")
+		allLinks[link] = desc
 	}
-	return allLinks
 }
 
 // GetAllLinks gets all of the pcap download links from various websites
-func GetAllLinks() []LinkData {
-	var links []LinkData
-	var newLinks []LinkData
+func GetAllLinks() map[string]string {
+	links := make(map[string]string)
 	var wg sync.WaitGroup
 	start := time.Now()
 
@@ -118,19 +116,22 @@ func GetAllLinks() []LinkData {
 	plCapURL := "http://packetlife.net/captures/"
 	plPageUrls := getPlCapPages(&wg)
 	plRe := `<h3>(?P<name>.*?\S)\s*<small>[\s\S]*?<p>(?P<desc>[\s\S]*?\S)\s*</p>\s*`
-	newLinks = getCaptureLinks(plCapURL, plPageUrls, plRe, &wg)
-	links = append(links, newLinks...)
+	for _, pageURL := range plPageUrls {
+		addCaptureLinks(plCapURL, pageURL, links, plRe, &wg)
+	}
 
 	// From Wireshark Sample Captures, provided by the community
 	wsCapURL := "https://wiki.wireshark.org"
-	wsSampleUrls := []string{wsCapURL + "/SampleCaptures"}
+	wsSampleURL := wsCapURL + "/SampleCaptures"
+	wsAppendixLinksRe := `Appendix\" title=\"[^"]*\" href=\"([^"]*)\"()`
+	addCaptureLinks(wsCapURL, wsSampleURL, links, wsAppendixLinksRe, &wg)
 	// It looks like this HTML was written by hand (i.e. harder to use regex)
-	wsSampleRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
-	newLinks = getCaptureLinks(wsCapURL, wsSampleUrls, wsSampleRe, &wg)
-	links = append(links, newLinks...)
+	// If a link is found both in appendix and in pagetext, overwrite with link that has description
+	wsLinkWithDescRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
+	addCaptureLinks(wsCapURL, wsSampleURL, links, wsLinkWithDescRe, &wg)
 
 	wg.Wait()
-	numPages := len(plPageUrls) + len(wsSampleUrls)
+	numPages := len(plPageUrls) + 1
 	fmt.Printf("-> Fetched %d pages containing %d links in %s\n", numPages, len(links), time.Since(start))
 	return links
 }
