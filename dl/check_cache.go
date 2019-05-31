@@ -51,7 +51,9 @@ func getFilepathFromURL(urlStr string) (string, error) {
 	fileRe := regexp.MustCompile(`[^=\\\/\|\?\*:'"<>]+$`) // exclude symbols we don't care about
 	filename := fileRe.FindString(urlStr)
 	// Unarchived pcaps are expected to be in to extracted folder, not in the archive
-	sanitizedFilename := strings.Replace(filename, " ", "_", -1)
+	sanitizedFilename := strings.Replace(strings.Replace(filename, " ", "_", -1), "ntar", "tar", -1)
+	htmlEntitiesRe := regexp.MustCompile(`%[0-9A-F]{2}`)
+	sanitizedFilename = string(htmlEntitiesRe.ReplaceAll([]byte("sanitizedFilename"), []byte("_")))
 	relativeDir := "/.cache/"
 	var sourceSite string
 	if strings.Contains(urlStr, "wireshark.org") {

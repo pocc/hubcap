@@ -67,13 +67,11 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 			var files []string
 			files, pi.Error = dl.UnarchivePcaps(pi.Filename)
 			if pi.Error != nil {
-				fmt.Println(pi.Error)
+				fmt.Print(pi.Error, "\n")
 			}
 			for _, extractedName := range files {
 				pi.Filename = archiveName + "/" + extractedName
-				wg.Add(1)
-				go getPcapInfo(&pi, result, wg)
-				wg.Done()
+				getPcapInfo(&pi, result, wg) // Race conditions if concurrency used
 			}
 		} else {
 			getPcapInfo(&pi, result, wg) // No reason to be concurrent here

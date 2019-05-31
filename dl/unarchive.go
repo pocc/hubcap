@@ -12,7 +12,7 @@ import (
 // UnarchivePcaps will unarchive pcaps from archive f to a folder of the same name before removing f
 func UnarchivePcaps(archived string) ([]string, error) {
 	fmt.Printf("\033[92mINFO\033[0m Unarchiving %s\n", archived)
-	folderName := StripArchiveExt(archived)
+	folderName := string(StripArchiveExt(archived))
 	if folderName == archived {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Unarchive called for nonarchive %s", archived)
 	}
