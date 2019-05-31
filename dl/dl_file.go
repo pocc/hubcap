@@ -33,11 +33,10 @@ func downloadFile(url string, filepath string, retrySec int) error {
 			retrySec = 2*retrySec + 1 // ~ f(n) = 2^(n+1)-1
 			fmt.Println("\033[93mWARN\033[0m Download from", url, "failed with code", resp.StatusCode,
 				"\nRetrying after", retrySec, "seconds...")
-			downloadFile(url, filepath, retrySec)
-		} else {
-			contextStr = "Have retried 5 times and will not retry."
-			fmt.Println(contextStr)
+			return downloadFile(url, filepath, retrySec)
 		}
+		contextStr = "Have retried 5 times and will not retry."
+		fmt.Println(contextStr)
 	case 200:
 		// Write the body to file
 		fmt.Println("\033[92mINFO\033[0m Saving to", filepath)

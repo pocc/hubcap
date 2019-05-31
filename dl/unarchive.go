@@ -2,8 +2,8 @@ package dl
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/mholt/archiver"
@@ -28,15 +28,31 @@ func UnarchivePcaps(archived string) ([]string, error) {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem deleting archive `%s` "+
 			"(Do you have permissions?).\nERROR: %s", archived, delErr)
 	}
-	files, err := ioutil.ReadDir(folderName)
+	files, err := WalkArchive(folderName)
 	if err != nil {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Could not read archive directory %s", folderName)
 	}
 	newFiles := make([]string, len(files))
 	for i, file := range files {
-		newFiles[i] = file.Name()
+		newFiles[i] = file
 	}
 	return newFiles, nil
+}
+
+// WalkArchive walks an extracted archive
+func WalkArchive(startpath string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(startpath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		fmt.Println("Problem walking archive recursively", err)
+	}
+	return files, err
 }
 
 // StripArchiveExt removes archive extensions `.tar.gz` and `.bz2` or returns filename otherwise

@@ -10,8 +10,7 @@ import (
 	"strings"
 )
 
-// FetchFile will get the filename from cache or download it. If the file is
-// an archive, then check whether an extracted folder of the same name exists.
+// FetchFile will get the filename from cache or download it.
 func FetchFile(urlStr string) (string, error) {
 	fPath, err := getFilepathFromURL(urlStr)
 	if err != nil {
@@ -22,10 +21,9 @@ func FetchFile(urlStr string) (string, error) {
 	if notPcapRe.FindString(fPath) != "" {
 		return fPath, fmt.Errorf("\033[92mINFO\033[0m Skipping download of non-pcap file %s from %s", fPath, urlStr)
 	}
-	// If file path or target archive extracted folder does not exist
-	archiveStr := StripArchiveExt(fPath)
-	_, archiveErr := os.Stat(archiveStr)
-	if os.IsNotExist(archiveErr) {
+	// If file path does not exist
+	_, fileErr := os.Stat(fPath)
+	if os.IsNotExist(fileErr) {
 		fmt.Println("\033[92mINFO\033[0m", fPath, "not found in cache. Downloading", urlStr)
 		fetchErr := downloadFile(urlStr, fPath, 0)
 		if fetchErr != nil {
@@ -53,7 +51,7 @@ func getFilepathFromURL(urlStr string) (string, error) {
 	// Unarchived pcaps are expected to be in to extracted folder, not in the archive
 	sanitizedFilename := strings.Replace(strings.Replace(filename, " ", "_", -1), "ntar", "tar", -1)
 	htmlEntitiesRe := regexp.MustCompile(`%[0-9A-F]{2}`)
-	sanitizedFilename = string(htmlEntitiesRe.ReplaceAll([]byte("sanitizedFilename"), []byte("_")))
+	sanitizedFilename = string(htmlEntitiesRe.ReplaceAll([]byte(sanitizedFilename), []byte("_")))
 	relativeDir := "/.cache/"
 	var sourceSite string
 	if strings.Contains(urlStr, "wireshark.org") {

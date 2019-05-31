@@ -51,7 +51,6 @@ func main() {
 			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
 		go getPcapJSON(link, desc, resultJSON, &wg)
-		wg.Done()
 	}
 	fmt.Println("Waiting for all goroutines to finish...")
 	wg.Wait() // All goroutines MUST complete before writing results
@@ -63,22 +62,33 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
 		archiveName := dl.StripArchiveExt(pi.Filename)
-		if archiveName != pi.Filename {
-			var files []string
-			files, pi.Error = dl.UnarchivePcaps(pi.Filename)
-			if pi.Error != nil {
-				fmt.Print(pi.Error, "\n")
-			}
-			for _, extractedName := range files {
-				pi.Filename = archiveName + "/" + extractedName
-				getPcapInfo(&pi, result, wg) // Race conditions if concurrency used
-			}
+		isArchive := archiveName != pi.Filename
+		if isArchive {
+			getArchiveInfo(archiveName, &pi, result, wg)
 		} else {
 			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
 		}
 	} else {
 		fmt.Println(twoLines(pi.Error))
+		wg.Done()
 	}
+}
+
+func getArchiveInfo(archiveName string, pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+	var files []string
+	_, fileErr := os.Stat(archiveName)
+	isArchiveExtracted := os.IsNotExist(fileErr)
+	if isArchiveExtracted {
+		files, pi.Error = dl.WalkArchive(pi.Filename)
+	} else {
+		files, pi.Error = dl.UnarchivePcaps(pi.Filename)
+	}
+	for _, extractedName := range files {
+		pi.Filename = archiveName + "/" + extractedName
+		wg.Add(1)
+		go getPcapInfo(pi, result, wg)
+	}
+	wg.Done()
 }
 
 func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
@@ -93,6 +103,7 @@ func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
 		fmt.Println(twoLines(pi.Error))
 	}
 	result.Set(pi.Filename, pi)
+	wg.Done()
 }
 
 // Gets the first 1000 chars or two lines of error
