@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -18,8 +19,10 @@ func GetCapinfos(filename string) (map[string]interface{}, error) {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	err := cmd.Run()
-	if err != nil || !bytes.Equal(stderr.Bytes(), []byte("")) {
+	cmd.Run()
+	if strings.Contains(string(stderr.Bytes()), "cut short in the middle") {
+		fixPcap(filename)
+	} else if !bytes.Equal(stderr.Bytes(), []byte("")) {
 		// This is not a fatal error because it's ok if some files are not read
 		capinfosErr := fmt.Errorf("\033[93mWARN\033[0m " + string(stderr.Bytes()))
 		errorResult := make(map[string]interface{})

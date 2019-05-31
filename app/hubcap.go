@@ -37,12 +37,6 @@ func main() {
 	var wg sync.WaitGroup
 	resultJSON := mutexmap.NewDS()
 
-	// If .cache and .cache/archive folders does not exist, create them
-	if err := os.MkdirAll(".cache/unarchived", 0722); err != nil {
-		fmt.Printf("Unable to create cache folders")
-		os.Exit(1)
-	}
-
 	links := html.GetAllLinks()
 	wg.Add(len(links))
 	for link, desc := range links {
@@ -61,10 +55,10 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 	pi := PcapInfo{Description: desc}
 	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
-		archiveName := dl.StripArchiveExt(pi.Filename)
-		isArchive := archiveName != pi.Filename
+		archiveFolder := dl.StripArchiveExt(pi.Filename)
+		isArchive := archiveFolder != pi.Filename
 		if isArchive {
-			getArchiveInfo(archiveName, &pi, result, wg)
+			getArchiveInfo(archiveFolder, &pi, result, wg)
 		} else {
 			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
 		}
@@ -74,19 +68,23 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 	}
 }
 
-func getArchiveInfo(archiveName string, pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
 	var files []string
-	_, fileErr := os.Stat(archiveName)
-	isArchiveExtracted := os.IsNotExist(fileErr)
+	_, fileErr := os.Stat(archiveFolder)
+	isArchiveExtracted := !os.IsNotExist(fileErr)
 	if isArchiveExtracted {
-		files, pi.Error = dl.WalkArchive(pi.Filename)
+		files, pi.Error = dl.WalkArchive(archiveFolder)
 	} else {
 		files, pi.Error = dl.UnarchivePcaps(pi.Filename)
 	}
-	for _, extractedName := range files {
-		pi.Filename = archiveName + "/" + extractedName
-		wg.Add(1)
-		go getPcapInfo(pi, result, wg)
+	if pi.Error != nil {
+		fmt.Println(twoLines(pi.Error))
+	} else {
+		for _, extractedName := range files {
+			pi.Filename = extractedName
+			wg.Add(1)
+			go getPcapInfo(pi, result, wg)
+		}
 	}
 	wg.Done()
 }

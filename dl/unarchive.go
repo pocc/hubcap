@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/mholt/archiver"
+	"github.com/pocc/hubcap/pcap"
 )
 
 // UnarchivePcaps will unarchive pcaps from archive f to a folder of the same name before removing f
@@ -32,21 +33,24 @@ func UnarchivePcaps(archived string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Could not read archive directory %s", folderName)
 	}
-	newFiles := make([]string, len(files))
-	for i, file := range files {
-		newFiles[i] = file
+	if len(files) == 0 {
+		return nil, fmt.Errorf("\033[93mWARN\033[0m Archive %s had no pcaps", archived)
 	}
-	return newFiles, nil
+	return files, nil
 }
 
 // WalkArchive walks an extracted archive
 func WalkArchive(startpath string) ([]string, error) {
-	var files []string
+	files := make([]string, 0)
 	err := filepath.Walk(startpath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		files = append(files, path)
+		pcapErr := pcap.IsPcap(path)
+		// If a file inside the archive isn't a pcap, skip it silently
+		if pcapErr == nil {
+			files = append(files, path)
+		}
 		return nil
 	})
 	if err != nil {
