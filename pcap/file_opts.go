@@ -3,7 +3,11 @@ package pcap
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
+	"io"
+	"log"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -41,4 +45,20 @@ func fixPcap(filepath string) {
 	if !strings.Contains(errStr, "cut short in the middle") && !strings.Contains(errStr, "appears to be damaged") {
 		fmt.Printf("\033[93mWARN\033[0m Problem fixing %s with editcap: %s\n", filepath, errStr)
 	}
+}
+
+// GetSHA256 will get the SHA256 of a file
+func GetSHA256(filename string) string {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		log.Fatal(err)
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil))
 }

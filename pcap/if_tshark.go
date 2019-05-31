@@ -23,6 +23,7 @@ type tsharkInfo struct {
 
 // GetTsharkInfo filters with the given filter and then applies fields
 func GetTsharkInfo(filename string, filter string, fields ...string) ([]byte, error) {
+	fmt.Printf("\033[92mINFO\033[0m tshark is reading file `%s` with filter `%s` and fields %s\n", filename, filter, fields)
 	cmdList := []string{"-T", "fields", "-Y", filter, "-E", "separator=|"}
 	for _, field := range fields {
 		cmdList = append(cmdList, "-e", field)

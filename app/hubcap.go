@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -37,20 +38,66 @@ type PcapInfo struct {
 
 func main() {
 	var wg sync.WaitGroup
+	goroutineLimit := 500
 	resultJSON := mutexmap.NewDS()
+	cacheJSON := mutexmap.NewDS()
 
 	links := html.GetAllLinks()
+	_, err := os.Stat(".cache")
+	if os.IsNotExist(err) {
+		fmt.Println("Creating cache folders...")
+		os.MkdirAll(".cache/packetlife", 0744)
+		os.MkdirAll(".cache/wireshark", 0744)
+	} else { // If .cache folder doesn't exist, then captures.json won't either.
+		loadCache(links, cacheJSON)
+		for k, v := range cacheJSON.Cache {
+			resultJSON.Set(k, v)
+		}
+		resultJSON = cacheJSON
+	}
 	wg.Add(len(links))
 	for link, desc := range links {
-		// Limit to 100 goroutines at a time
-		for runtime.NumGoroutine() > 100 {
-			time.Sleep(time.Duration(10) * time.Millisecond)
+		if goroutineLimit != 0 {
+			for runtime.NumGoroutine() > goroutineLimit {
+				time.Sleep(time.Duration(10) * time.Millisecond)
+			}
 		}
 		go getPcapJSON(link, desc, resultJSON, &wg)
 	}
-	fmt.Println("Waiting for all goroutines to finish...")
+	fmt.Printf("Almost done. Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
 	wg.Wait() // All goroutines MUST complete before writing results
-	writeJSON(resultJSON.Cache)
+
+	if !reflect.DeepEqual(resultJSON.Cache, cacheJSON.Cache) {
+		fmt.Println("\n\033[92mINFO\033[0m Skipping write: There are no new pcaps to add to captures.json")
+	} else {
+		fmt.Printf("\n\033[92mINFO\033[0m Writing information about %d files to .cache/captures.json\n", len(resultJSON.Cache))
+		writeJSON(resultJSON.Cache)
+	}
+}
+
+// Use the cache to skip analyzing pcaps that we have data on
+func loadCache(allLinks map[string]string, cacheJSON *mutexmap.DataStore) {
+	initalCount := len(allLinks)
+	fmt.Println("\033[92mINFO\033[0m Using cached data from .cache/captures.json")
+	capturesFD, err := os.Open(".cache/captures.json")
+	if err != nil {
+		fmt.Println("Problem opening captures.json. Not using data cache will take longer.")
+		return
+	}
+
+	var captureStruct map[string]PcapInfo
+	captureText, ioErr := ioutil.ReadAll(capturesFD)
+	if ioErr != nil {
+		fmt.Println("Problem reading captures cache. Error:", ioErr)
+		os.Exit(1)
+	}
+	json.Unmarshal(captureText, &captureStruct)
+	for filehash, capture := range captureStruct {
+		cacheJSON.Set(filehash, capture)
+		delete(allLinks, capture.Source)
+	}
+	fmt.Printf("\033[92mINFO\033[0m Loading %d files from cache\n", len(cacheJSON.Cache))
+	fmt.Printf("\033[92mINFO\033[0m Skipping %d files due to cache\n", initalCount-len(allLinks))
 }
 
 func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.WaitGroup) {
@@ -66,8 +113,8 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 		}
 	} else {
 		fmt.Println(twoLines(pi.Error))
-		wg.Done()
 	}
+	wg.Done()
 }
 
 func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
@@ -88,12 +135,13 @@ func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataSto
 			// Each pcap should have separate PcapInfo
 			newPi := pi
 			go getPcapInfo(newPi, result, wg)
+			wg.Done()
 		}
 	}
-	wg.Done()
 }
 
 func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+	relFileName := ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
 	pi.Error = pcap.IsPcap(pi.Filename)
 	if pi.Error == nil {
 		// TODO fix should be a command line option and available as an option.
@@ -101,18 +149,21 @@ func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
 		if pi.Error == nil {
 			pi.Protocols, pi.Ports, pi.Error = pcap.GetTsharkJSON(pi.Filename)
 			// Remove folder heirarchy
-			pi.Filename = ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
+			pi.Filename = relFileName
 			// Capinfos filename is redundant so remove it
 			delete(pi.Capinfos, "FileName")
 			// Primary key of JSON should be SHA256 of pcap if possible
 			fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
+			result.Set(fileHash, pi)
+		} else {
+			pi.Filename = relFileName
+			fileHash := pcap.GetSHA256(pi.Filename)
 			result.Set(fileHash, pi)
 		}
 	}
 	if pi.Error != nil {
 		fmt.Println(twoLines(pi.Error))
 	}
-	wg.Done()
 }
 
 // Gets the first 1000 chars or two lines of error
@@ -130,12 +181,6 @@ func twoLines(err error) error {
 		line = line[:1000]
 	}
 	return fmt.Errorf("%s", line)
-}
-
-// Warn and end the current goroutine
-func endGC(url string, result *mutexmap.DataStore, wg *sync.WaitGroup, values interface{}) {
-	result.Set(url, values)
-	wg.Done()
 }
 
 func writeJSON(resultJSON map[string]interface{}) {

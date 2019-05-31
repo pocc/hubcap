@@ -4,3 +4,4 @@ _gen/
 # Exclude .cache contents, but not folder
 !.cache/
 .cache/*
+.DS_Store
