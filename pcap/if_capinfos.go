@@ -12,7 +12,7 @@ import (
 )
 
 // GetCapinfos creates a json out of capinfos output
-func GetCapinfos(filename string) (map[string]interface{}, error) {
+func GetCapinfos(filename string, shouldFix bool) (map[string]interface{}, error) {
 	cmd := exec.Command("capinfos", "-M", filename)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -20,7 +20,8 @@ func GetCapinfos(filename string) (map[string]interface{}, error) {
 	cmd.Stderr = stderr
 
 	cmd.Run()
-	if strings.Contains(string(stderr.Bytes()), "cut short in the middle") {
+	willFix := shouldFix && strings.Contains(string(stderr.Bytes()), "cut short in the middle")
+	if willFix {
 		fixPcap(filename)
 	} else if !bytes.Equal(stderr.Bytes(), []byte("")) {
 		// This is not a fatal error because it's ok if some files are not read

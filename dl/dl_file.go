@@ -36,7 +36,6 @@ func downloadFile(url string, filepath string, retrySec int) error {
 			return downloadFile(url, filepath, retrySec)
 		}
 		contextStr = "Have retried 5 times and will not retry."
-		fmt.Println(contextStr)
 	case 200:
 		// Write the body to file
 		fmt.Println("\033[92mINFO\033[0m Saving to", filepath)
@@ -56,7 +55,7 @@ func downloadFile(url string, filepath string, retrySec int) error {
 		return fmt.Errorf("Received unexpected code %d from %s. "+
 			"Please create an issue", resp.StatusCode, url)
 	}
-	return fmt.Errorf("\033[93mWARN\033[0m "+
+	return fmt.Errorf("\033[91mERROR\033[0m "+
 		"Download of %s failed with code %d: %s. Skipping...",
 		url, resp.StatusCode, contextStr)
 }

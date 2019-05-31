@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 // PcapInfo stores info about an individual pcap
 type PcapInfo struct {
 	Filename    string
+	Source      string
 	Description string
 	Capinfos    map[string]interface{}
 	Protocols   []string
@@ -52,7 +54,7 @@ func main() {
 }
 
 func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.WaitGroup) {
-	pi := PcapInfo{Description: desc}
+	pi := PcapInfo{Source: link, Description: desc}
 	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
 		archiveFolder := dl.StripArchiveExt(pi.Filename)
@@ -83,7 +85,9 @@ func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataSto
 		for _, extractedName := range files {
 			pi.Filename = extractedName
 			wg.Add(1)
-			go getPcapInfo(pi, result, wg)
+			// Each pcap should have separate PcapInfo
+			newPi := pi
+			go getPcapInfo(newPi, result, wg)
 		}
 	}
 	wg.Done()
@@ -92,15 +96,22 @@ func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataSto
 func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
 	pi.Error = pcap.IsPcap(pi.Filename)
 	if pi.Error == nil {
-		pi.Capinfos, pi.Error = pcap.GetCapinfos(pi.Filename)
+		// TODO fix should be a command line option and available as an option.
+		pi.Capinfos, pi.Error = pcap.GetCapinfos(pi.Filename, false)
 		if pi.Error == nil {
 			pi.Protocols, pi.Ports, pi.Error = pcap.GetTsharkJSON(pi.Filename)
+			// Remove folder heirarchy
+			pi.Filename = ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
+			// Capinfos filename is redundant so remove it
+			delete(pi.Capinfos, "FileName")
+			// Primary key of JSON should be SHA256 of pcap if possible
+			fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
+			result.Set(fileHash, pi)
 		}
 	}
 	if pi.Error != nil {
 		fmt.Println(twoLines(pi.Error))
 	}
-	result.Set(pi.Filename, pi)
 	wg.Done()
 }
 
