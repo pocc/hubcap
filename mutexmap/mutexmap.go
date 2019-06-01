@@ -14,7 +14,7 @@ type PcapInfo struct {
 	Capinfos    map[string]interface{}
 	Protocols   []string
 	Ports       map[string][]int
-	Error       error
+	ErrorStr    string
 }
 
 // DataStore is the container for a map
@@ -57,7 +57,7 @@ func (ds *DataStore) addSources(hash string, addend []string) {
 		Capinfos:    ds.Cache[hash].Capinfos,
 		Protocols:   ds.Cache[hash].Protocols,
 		Ports:       ds.Cache[hash].Ports,
-		Error:       ds.Cache[hash].Error,
+		ErrorStr:    ds.Cache[hash].ErrorStr,
 	}
 	ds.Cache[hash] = temp
 }

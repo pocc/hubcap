@@ -99,8 +99,9 @@ func loadCache(allLinks map[string]string, cacheJSON *ds.DataStore) {
 
 func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGroup) {
 	pi := ds.PcapInfo{Sources: []string{link}, Description: desc}
-	pi.Filename, pi.Error = dl.FetchFile(link)
-	if pi.Error == nil {
+	var dlErr error
+	pi.Filename, dlErr = dl.FetchFile(link)
+	if dlErr == nil {
 		archiveFolder := dl.StripArchiveExt(pi.Filename)
 		isArchive := archiveFolder != pi.Filename
 		if isArchive {
@@ -109,22 +110,28 @@ func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGr
 			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
 		}
 	} else {
-		fmt.Println(twoLines(pi.Error))
+		fmt.Println(twoLines(dlErr))
+		if strings.Contains(dlErr.Error(), "non-pcap") {
+			newPi := ds.PcapInfo{Sources: []string{link}, Description: "Files whose URL has a non-pcap file extension or that captype reports as \"unknown\" filetype."}
+			result.Set("->Error:NotAPcap", &newPi)
+		}
 	}
 	wg.Done()
 }
 
 func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 	var files []string
+	var err error
 	_, fileErr := os.Stat(archiveFolder)
 	isArchiveExtracted := !os.IsNotExist(fileErr)
 	if isArchiveExtracted {
-		files, pi.Error = dl.WalkArchive(archiveFolder)
+		files, err = dl.WalkArchive(archiveFolder)
 	} else {
-		files, pi.Error = dl.UnarchivePcaps(pi.Filename)
+		files, err = dl.UnarchivePcaps(pi.Filename)
 	}
-	if pi.Error != nil {
-		fmt.Println(twoLines(pi.Error))
+	if err != nil {
+		pi.ErrorStr = twoLines(err).Error()
+		fmt.Println(twoLines(err))
 	} else {
 		for _, extractedName := range files {
 			pi.Filename = extractedName
@@ -139,12 +146,13 @@ func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore,
 
 func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 	relFileName := ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
-	pi.Error = pcap.IsPcap(pi.Filename)
-	if pi.Error == nil {
-		// TODO fix should be a command line option and available as an option.
-		pi.Capinfos, pi.Error = pcap.GetCapinfos(pi.Filename, false)
-		if pi.Error == nil {
-			pi.Protocols, pi.Ports, pi.Error = pcap.GetTsharkJSON(pi.Filename)
+	var err error
+	err = pcap.IsPcap(pi.Filename)
+	if err == nil {
+		// TODO fix should be a command line option and available as an option
+		pi.Capinfos, err = pcap.GetCapinfos(pi.Filename, false)
+		if err == nil {
+			pi.Protocols, pi.Ports, err = pcap.GetTsharkJSON(pi.Filename)
 			// Remove folder heirarchy
 			pi.Filename = relFileName
 			// Capinfos filename is redundant so remove it
@@ -152,14 +160,17 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 			// Primary key of JSON should be SHA256 of pcap if possible
 			fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
 			result.Set(fileHash, pi)
-		} else {
+		}
+		if err != nil {
+			pi.ErrorStr = twoLines(err).Error()
+			fmt.Println(twoLines(err))
 			pi.Filename = relFileName
 			fileHash := pcap.GetSHA256(pi.Filename)
 			result.Set(fileHash, pi)
 		}
-	}
-	if pi.Error != nil {
-		fmt.Println(twoLines(pi.Error))
+	} else {
+		// If file is not a pcap, make a note of the link, but no more
+		result.Set("->Error:NotAPcap", &ds.PcapInfo{Sources: pi.Sources})
 	}
 }
 
@@ -181,7 +192,12 @@ func twoLines(err error) error {
 }
 
 func writeJSON(resultJSON map[string]ds.PcapInfo) {
-	jsonBytes, err := json.MarshalIndent(resultJSON, "", "  ")
+	// UTF escape codes require extra attention per https://stackoverflow.com/questions/24656624
+	jsonBuf := new(bytes.Buffer)
+	enc := json.NewEncoder(jsonBuf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	err := enc.Encode(resultJSON)
 	if err != nil {
 		fmt.Println("Error in converting JSON:", err)
 		fmt.Println("JSON:", resultJSON)
@@ -192,7 +208,7 @@ func writeJSON(resultJSON map[string]ds.PcapInfo) {
 		os.Exit(1)
 	}
 	jsonPath := dir + "/.cache/captures.json"
-	err = ioutil.WriteFile(jsonPath, jsonBytes, 0644)
+	err = ioutil.WriteFile(jsonPath, jsonBuf.Bytes(), 0644)
 	if err != nil {
 		fmt.Println("Error in writing JSON to file:", err)
 		fmt.Println("Filepath:", jsonPath)

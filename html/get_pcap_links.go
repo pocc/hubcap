@@ -6,7 +6,6 @@ import (
 	"html"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -67,11 +66,11 @@ func getPlCapPages(wg *sync.WaitGroup) []string {
 
 // Wireshark bugzilla attachments are sequential, but not all are pcaps
 func getWsBugzillaPcaps() {
+	/*https://bugs.wireshark.org/bugzilla/attachment.cgi?id=
 	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
-	// <div class="details">M1_header_crc.pcapng (application/x-pcapng),432 bytes, created by
-	// `<div class=\"details\">[\s\S]*?\(application/([\s\S]*)`
+	for 6400
 	fmt.Println("This function is not implemented!")
-	os.Exit(1)
+	os.Exit(1)*/
 }
 
 // addCaptureLinks adds links to the links map
