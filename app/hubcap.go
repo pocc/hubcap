@@ -21,26 +21,15 @@ import (
 
 	"github.com/pocc/hubcap/dl"
 	"github.com/pocc/hubcap/html"
-	"github.com/pocc/hubcap/mutexmap"
+	ds "github.com/pocc/hubcap/mutexmap"
 	"github.com/pocc/hubcap/pcap"
 )
-
-// PcapInfo stores info about an individual pcap
-type PcapInfo struct {
-	Filename    string
-	Source      string
-	Description string
-	Capinfos    map[string]interface{}
-	Protocols   []string
-	Ports       map[string][]int
-	Error       error
-}
 
 func main() {
 	var wg sync.WaitGroup
 	goroutineLimit := 500
-	resultJSON := mutexmap.NewDS()
-	cacheJSON := mutexmap.NewDS()
+	resultJSON := ds.NewDS()
+	cacheJSON := ds.NewDS()
 
 	links := html.GetAllLinks()
 	_, err := os.Stat(".cache")
@@ -48,12 +37,11 @@ func main() {
 		fmt.Println("Creating cache folders...")
 		os.MkdirAll(".cache/packetlife", 0744)
 		os.MkdirAll(".cache/wireshark", 0744)
-	} else { // If .cache folder doesn't exist, then captures.json won't either.
+	} else { // If .cache/ folder doesn't exist, then .cache/captures.json won't either.
 		loadCache(links, cacheJSON)
 		for k, v := range cacheJSON.Cache {
-			resultJSON.Set(k, v)
+			resultJSON.Set(k, &v)
 		}
-		resultJSON = cacheJSON
 	}
 	wg.Add(len(links))
 	for link, desc := range links {
@@ -66,17 +54,24 @@ func main() {
 	}
 	fmt.Printf("Almost done. Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
 	wg.Wait() // All goroutines MUST complete before writing results
-
-	if !reflect.DeepEqual(resultJSON.Cache, cacheJSON.Cache) {
-		fmt.Println("\n\033[92mINFO\033[0m Skipping write: There are no new pcaps to add to captures.json")
-	} else {
-		fmt.Printf("\n\033[92mINFO\033[0m Writing information about %d files to .cache/captures.json\n", len(resultJSON.Cache))
+	resultAndCacheDiffer := false
+	for k, v := range resultJSON.Cache {
+		if !reflect.DeepEqual(cacheJSON.Cache[k], v) {
+			resultAndCacheDiffer = true
+			break
+		}
+	}
+	if resultAndCacheDiffer {
+		addedPcapCount := len(resultJSON.Cache) - len(cacheJSON.Cache)
+		fmt.Printf("\n\033[92mINFO\033[0m Writing information about %d new files (%d total) to .cache/captures.json\n", addedPcapCount, len(resultJSON.Cache))
 		writeJSON(resultJSON.Cache)
+	} else {
+		fmt.Println("\n\033[92mINFO\033[0m Skipping write: There are no new pcaps to add to captures.json")
 	}
 }
 
 // Use the cache to skip analyzing pcaps that we have data on
-func loadCache(allLinks map[string]string, cacheJSON *mutexmap.DataStore) {
+func loadCache(allLinks map[string]string, cacheJSON *ds.DataStore) {
 	initalCount := len(allLinks)
 	fmt.Println("\033[92mINFO\033[0m Using cached data from .cache/captures.json")
 	capturesFD, err := os.Open(".cache/captures.json")
@@ -85,7 +80,7 @@ func loadCache(allLinks map[string]string, cacheJSON *mutexmap.DataStore) {
 		return
 	}
 
-	var captureStruct map[string]PcapInfo
+	var captureStruct map[string]ds.PcapInfo
 	captureText, ioErr := ioutil.ReadAll(capturesFD)
 	if ioErr != nil {
 		fmt.Println("Problem reading captures cache. Error:", ioErr)
@@ -93,15 +88,17 @@ func loadCache(allLinks map[string]string, cacheJSON *mutexmap.DataStore) {
 	}
 	json.Unmarshal(captureText, &captureStruct)
 	for filehash, capture := range captureStruct {
-		cacheJSON.Set(filehash, capture)
-		delete(allLinks, capture.Source)
+		cacheJSON.Set(filehash, &capture)
+		for _, link := range capture.Sources {
+			delete(allLinks, link)
+		}
 	}
 	fmt.Printf("\033[92mINFO\033[0m Loading %d files from cache\n", len(cacheJSON.Cache))
 	fmt.Printf("\033[92mINFO\033[0m Skipping %d files due to cache\n", initalCount-len(allLinks))
 }
 
-func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.WaitGroup) {
-	pi := PcapInfo{Source: link, Description: desc}
+func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGroup) {
+	pi := ds.PcapInfo{Sources: []string{link}, Description: desc}
 	pi.Filename, pi.Error = dl.FetchFile(link)
 	if pi.Error == nil {
 		archiveFolder := dl.StripArchiveExt(pi.Filename)
@@ -117,7 +114,7 @@ func getPcapJSON(link string, desc string, result *mutexmap.DataStore, wg *sync.
 	wg.Done()
 }
 
-func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 	var files []string
 	_, fileErr := os.Stat(archiveFolder)
 	isArchiveExtracted := !os.IsNotExist(fileErr)
@@ -140,7 +137,7 @@ func getArchiveInfo(archiveFolder string, pi *PcapInfo, result *mutexmap.DataSto
 	}
 }
 
-func getPcapInfo(pi *PcapInfo, result *mutexmap.DataStore, wg *sync.WaitGroup) {
+func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 	relFileName := ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
 	pi.Error = pcap.IsPcap(pi.Filename)
 	if pi.Error == nil {
@@ -183,7 +180,7 @@ func twoLines(err error) error {
 	return fmt.Errorf("%s", line)
 }
 
-func writeJSON(resultJSON map[string]interface{}) {
+func writeJSON(resultJSON map[string]ds.PcapInfo) {
 	jsonBytes, err := json.MarshalIndent(resultJSON, "", "  ")
 	if err != nil {
 		fmt.Println("Error in converting JSON:", err)
