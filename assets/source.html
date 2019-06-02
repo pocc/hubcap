@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* {
+  box-sizing: border-box;
+}
+
+#myInput {
+  background-image: url('/css/searchicon.png');
+  background-position: 10px 12px;
+  background-repeat: no-repeat;
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 20px 12px 40px;
+  border: 1px solid #ddd;
+  margin-bottom: 12px;
+}
+
+#pcapTable {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+#pcapTable tr .r1 {color:red;}
+#pcapTable tr a {
+  border: 1px solid #ddd;
+  margin-top: -1px; /* Prevent double borders */
+  background-color: #f6f6f6;
+  padding: 12px;
+  text-decoration: none;
+  font-size: 18px;
+  color: black;
+  display: block
+}
+
+#pcapTable tr a :hover:not(.header) {
+  background-color: #eee;
+}
+</style>
+</head>
+<body>
+
+<h2>Packet Capture Search</h2>
+
+<p>Find pcaps with a provided protocol or L4 port number. Syntax:</p>
+<p>Search for pcaps containing arp:</p>
+<pre><code>arp</code></pre>
+Search for: <pre><code>port tcp.port tcp.srcport tcp.dstport udp.port udp.srcport udp.dstport</code></pre>
+
+<input type="text" id="myInput" onkeyup="myFunction()" placeholder="Search for names.." title="Type in a name">
+
+<table id="pcapTable">
+	<tr><td><a href="http://packetlife.net/captures/arp_pcap.pcapng.cap">arp</a></td></tr>
+	<tr><td><a href="http://packetlife.net/captures/dhcp-auth.cap">dhcp</a></td></tr>
+	<tr><td><a href="http://packetlife.net/captures/Spanning%20Tree%20-%20MST.pcapng.cap">stp</a></td></tr>
+</table>
+
+<script>
+function myFunction() {
+    var input, filter, table, tableElem, tElem, i, txtValue;
+    input = document.getElementById("myInput");
+    filter = input.value.toUpperCase();
+    table = document.getElementById("pcapTable");
+   	tableRow = table.getElementsByTagName("tr");
+	for (i = 0; i < tableRow.length; i++) {
+        tElem = tableRow[i].getElementsByTagName("a")[0];
+        txtValue = tElem.textContent || tElem.innerText;
+        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+          	tableRow[i].style.display = "";
+        } else {
+            tableRow[i].style.display = "none";
+        }
+    }
+}
+</script>
+
+</body>
+</html>
+
