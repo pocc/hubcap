@@ -52,9 +52,9 @@ Search for: <pre><code>port tcp.port tcp.srcport tcp.dstport udp.port udp.srcpor
 <input type="text" id="myInput" onkeyup="myFunction()" placeholder="Search for names.." title="Type in a name">
 
 <table id="pcapTable">
-	<tr><td><a href="http://packetlife.net/captures/arp_pcap.pcapng.cap">arp</a></td></tr>
-	<tr><td><a href="http://packetlife.net/captures/dhcp-auth.cap">dhcp</a></td></tr>
-	<tr><td><a href="http://packetlife.net/captures/Spanning%20Tree%20-%20MST.pcapng.cap">stp</a></td></tr>
+	<tr><td><a href="http://packetlife.net/captures/arp_pcap.pcapng.cap">arp</a></td><td></td></tr>
+	<tr><td><a href="http://packetlife.net/captures/dhcp-auth.cap">dhcp</a></td><td>67,68</td></tr>
+	<tr><td><a href="http://packetlife.net/captures/Spanning%20Tree%20-%20MST.pcapng.cap">stp</a></td><td>80</td></tr>
 </table>
 
 <script>
@@ -66,6 +66,7 @@ function myFunction() {
    	tableRow = table.getElementsByTagName("tr");
 	for (i = 0; i < tableRow.length; i++) {
         tElem = tableRow[i].getElementsByTagName("a")[0];
+        console.log(tableRow[i].getElementsByTagName("td")[]);
         txtValue = tElem.textContent || tElem.innerText;
         if (txtValue.toUpperCase().indexOf(filter) > -1) {
           	tableRow[i].style.display = "";

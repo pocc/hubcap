@@ -13,12 +13,6 @@ import (
 	"time"
 )
 
-// LinkData : All meta data for a pcap
-type LinkData struct {
-	Link        string
-	Description string
-}
-
 // Get the ASCII html from a URL
 func getHTML(pageURL string, htmlChan chan<- string, wg *sync.WaitGroup) {
 	fmt.Println("\033[92mINFO\033[0m Fetching HTML for page", pageURL)
@@ -66,11 +60,13 @@ func getPlCapPages(wg *sync.WaitGroup) []string {
 
 // Wireshark bugzilla attachments are sequential, but not all are pcaps
 func getWsBugzillaPcaps() {
-	/*https://bugs.wireshark.org/bugzilla/attachment.cgi?id=
-	// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
-	for 6400
-	fmt.Println("This function is not implemented!")
-	os.Exit(1)*/
+	baseStr := "https://bugs.wireshark.org/bugzilla/attachment.cgi?id="
+	fmt.Println(baseStr)
+	/*
+		// https://bugs.wireshark.org/bugzilla/attachment.cgi?id=6400
+		for 6400
+		fmt.Println("This function is not implemented!")
+		os.Exit(1)*/
 }
 
 // addCaptureLinks adds links to the links map

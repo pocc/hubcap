@@ -19,15 +19,35 @@ import (
 	"sync"
 	"time"
 
+	//flags "github.com/jessevdk/go-flags"
 	"github.com/pocc/hubcap/dl"
 	"github.com/pocc/hubcap/html"
 	ds "github.com/pocc/hubcap/mutexmap"
 	"github.com/pocc/hubcap/pcap"
 )
 
+/*
+var opts struct {
+	Iface         string         `value-name:"<source>" short:"i" description:"Interface to read."`
+	Pcap          flags.Filename `value-name:"<file>" short:"r" description:"Pcap file to read."`
+	DecodeAs      []string       `short:"d" description:"Specify dissection of layer type." value-name:"<layer type>==<selector>,<decode-as protocol>"`
+	PrintIfaces   bool           `short:"D" optional:"true" optional-value:"true" description:"Print a list of the interfaces on which termshark can capture."`
+	DisplayFilter string         `short:"Y" description:"Apply display filter." value-name:"<displaY filter>"`
+	CaptureFilter string         `short:"f" description:"Apply capture filter." value-name:"<capture filter>"`
+	PassThru      string         `long:"pass-thru" default:"auto" optional:"true" optional-value:"true" choice:"yes" choice:"no" choice:"auto" choice:"true" choice:"false" description:"Run tshark instead (auto => if stdout is not a tty)."`
+	LogTty        string         `long:"log-tty" default:"false" optional:"true" optional-value:"true" choice:"yes" choice:"no" choice:"true" choice:"false" description:"Log to the terminal.."`
+	Help          bool           `long:"help" short:"h" optional:"true" optional-value:"true" description:"Show this help message."`
+	Version       bool           `long:"version" short:"v" optional:"true" optional-value:"true" description:"Show version information."`
+
+	Args struct {
+		FilterOrFile string `value-name:"<filter-or-file>" description:"Filter (capture for iface, display for pcap), or pcap file to read."`
+	} `positional-args:"yes"`
+}*/
+
+var goroutineLimit = 100
+
 func main() {
 	var wg sync.WaitGroup
-	goroutineLimit := 500
 	resultJSON := ds.NewDS()
 	cacheJSON := ds.NewDS()
 
@@ -36,7 +56,8 @@ func main() {
 	if os.IsNotExist(err) {
 		fmt.Println("Creating cache folders...")
 		os.MkdirAll(".cache/packetlife", 0744)
-		os.MkdirAll(".cache/wireshark", 0744)
+		os.MkdirAll(".cache/wireshark_bugs", 0744)
+		os.MkdirAll(".cache/wireshark_wiki", 0744)
 	} else { // If .cache/ folder doesn't exist, then .cache/captures.json won't either.
 		loadCache(links, cacheJSON)
 		for k, v := range cacheJSON.Cache {
@@ -45,15 +66,17 @@ func main() {
 	}
 	wg.Add(len(links))
 	for link, desc := range links {
-		if goroutineLimit != 0 {
-			for runtime.NumGoroutine() > goroutineLimit {
-				time.Sleep(time.Duration(10) * time.Millisecond)
-			}
+		for runtime.NumGoroutine() > goroutineLimit {
+			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
 		go getPcapJSON(link, desc, resultJSON, &wg)
 	}
-	fmt.Printf("Almost done. Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
+	for runtime.NumGoroutine() > 5 {
+		fmt.Printf("Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
+		time.Sleep(5 * time.Second)
+	}
 	wg.Wait() // All goroutines MUST complete before writing results
+
 	resultAndCacheDiffer := false
 	for k, v := range resultJSON.Cache {
 		if !reflect.DeepEqual(cacheJSON.Cache[k], v) {
@@ -93,8 +116,7 @@ func loadCache(allLinks map[string]string, cacheJSON *ds.DataStore) {
 			delete(allLinks, link)
 		}
 	}
-	fmt.Printf("\033[92mINFO\033[0m Loading %d files from cache\n", len(cacheJSON.Cache))
-	fmt.Printf("\033[92mINFO\033[0m Skipping %d files due to cache\n", initalCount-len(allLinks))
+	fmt.Printf("\033[92mINFO\033[0m Loading %d links and %d unique files from cache\n", initalCount-len(allLinks), len(cacheJSON.Cache))
 }
 
 func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGroup) {
@@ -111,9 +133,13 @@ func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGr
 		}
 	} else {
 		fmt.Println(twoLines(dlErr))
-		if strings.Contains(dlErr.Error(), "non-pcap") {
-			newPi := ds.PcapInfo{Sources: []string{link}, Description: "Files whose URL has a non-pcap file extension or that captype reports as \"unknown\" filetype."}
+		switch {
+		case strings.Contains(dlErr.Error(), "non-pcap"):
+			newPi := ds.PcapInfo{Sources: []string{link}, Description: "Files whose URL have a non-pcap file extension."}
 			result.Set("->Error:NotAPcap", &newPi)
+		case strings.Contains(dlErr.Error(), "Invalid Attachment ID"):
+			newPi := ds.PcapInfo{Sources: []string{link}, Description: "This link is to a non-existant attachment in the wireshark bug database."}
+			result.Set("->Error:InvalidAttachment", &newPi)
 		}
 	}
 	wg.Done()
@@ -138,6 +164,9 @@ func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore,
 			wg.Add(1)
 			// Each pcap should have separate PcapInfo
 			newPi := pi
+			for runtime.NumGoroutine() > goroutineLimit {
+				time.Sleep(time.Duration(10) * time.Millisecond)
+			}
 			go getPcapInfo(newPi, result, wg)
 			wg.Done()
 		}
@@ -170,7 +199,8 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 		}
 	} else {
 		// If file is not a pcap, make a note of the link, but no more
-		result.Set("->Error:NotAPcap", &ds.PcapInfo{Sources: pi.Sources})
+		newPi := ds.PcapInfo{Sources: pi.Sources, Description: "Captype reports this file as having a filetype of \"unknown\"."}
+		result.Set("->Error:CaptypeUnknown", &newPi)
 	}
 }
 

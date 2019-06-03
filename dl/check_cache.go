@@ -53,12 +53,15 @@ func getFilepathFromURL(urlStr string) (string, error) {
 	htmlEntitiesRe := regexp.MustCompile(`%[0-9A-F]{2}`)
 	sanitizedFilename = string(htmlEntitiesRe.ReplaceAll([]byte(sanitizedFilename), []byte("_")))
 	relativeDir := "/.cache/"
-	var sourceSite string
-	if strings.Contains(urlStr, "wireshark.org") {
-		sourceSite = "ws"
-	} else if strings.Contains(urlStr, "packetlife.net") {
-		sourceSite = "pl"
+	var sourceFolder string
+	switch {
+	case strings.Contains(urlStr, "wiki.wireshark.org"):
+		sourceFolder = "wireshark_wiki/"
+	case strings.Contains(urlStr, "packetlife.net"):
+		sourceFolder = "packetlife/"
+	case strings.Contains(urlStr, "bugs.wireshark.org"):
+		sourceFolder = "wireshark_bugs/"
 	}
-	fullFilename := thisDir + relativeDir + sourceSite + "_" + sanitizedFilename
+	fullFilename := thisDir + relativeDir + sourceFolder + sanitizedFilename
 	return fullFilename, nil
 }
