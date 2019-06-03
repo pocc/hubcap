@@ -23,16 +23,21 @@
   padding: 0;
   margin: 0;
 }
-#pcapTable tr .r1 {color:red;}
-#pcapTable tr a {
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
   border: 1px solid #ddd;
-  margin-top: -1px; /* Prevent double borders */
-  background-color: #f6f6f6;
-  padding: 12px;
-  text-decoration: none;
-  font-size: 18px;
-  color: black;
-  display: block
+}
+
+th, td {
+  text-align: left;
+  padding: 16px;
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2
 }
 
 #pcapTable tr a :hover:not(.header) {
@@ -52,9 +57,26 @@ Search for: <pre><code>port tcp.port tcp.srcport tcp.dstport udp.port udp.srcpor
 <input type="text" id="myInput" onkeyup="myFunction()" placeholder="Search for names.." title="Type in a name">
 
 <table id="pcapTable">
-	<tr><td><a href="http://packetlife.net/captures/arp_pcap.pcapng.cap">arp</a></td><td></td></tr>
-	<tr><td><a href="http://packetlife.net/captures/dhcp-auth.cap">dhcp</a></td><td>67,68</td></tr>
-	<tr><td><a href="http://packetlife.net/captures/Spanning%20Tree%20-%20MST.pcapng.cap">stp</a></td><td>80</td></tr>
+  <tr>
+    <th>Name</th>
+    <th>Protocols</th>
+    <th>L4 Ports</th>
+  </tr>
+  <tr>
+    <td><a href="http://packetlife.net/captures/arp_pcap.pcapng.cap">arp</a></td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><a href="http://packetlife.net/captures/dhcp-auth.cap">dhcp</a></td>
+    <td></td>
+    <td>67,68</td>
+  </tr>
+  <tr>
+    <td><a href="http://packetlife.net/captures/Spanning%20Tree%20-%20MST.pcapng.cap">stp</a></td>
+    <td></td>
+    <td>80</td>
+  </tr>
 </table>
 
 <script>
@@ -63,13 +85,13 @@ function myFunction() {
     input = document.getElementById("myInput");
     filter = input.value.toUpperCase();
     table = document.getElementById("pcapTable");
-   	tableRow = table.getElementsByTagName("tr");
-	for (i = 0; i < tableRow.length; i++) {
+    tableRow = table.getElementsByTagName("tr");
+    for (i = 1; i < tableRow.length; i++) {
         tElem = tableRow[i].getElementsByTagName("a")[0];
-        console.log(tableRow[i].getElementsByTagName("td")[]);
+        console.log(tableRow[i].getElementsByTagName("tr"));
         txtValue = tElem.textContent || tElem.innerText;
         if (txtValue.toUpperCase().indexOf(filter) > -1) {
-          	tableRow[i].style.display = "";
+        tableRow[i].style.display = "";
         } else {
             tableRow[i].style.display = "none";
         }
