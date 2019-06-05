@@ -17,7 +17,7 @@ func FetchFile(urlStr string) (string, error) {
 		return "", fmt.Errorf("Invalid url %s passed in", urlStr)
 	}
 	// Using a blacklist because users are sloppy with how they name valid pcaps
-	notPcapRe := regexp.MustCompile(`\.(?:doc|ext|log|json|mib|mp3|p10|pdf|pppd|trc|txt|txt.gz|xls|xlsx|xml)$`)
+	notPcapRe := regexp.MustCompile(`\.(?:c|diff|doc|ext|log|json|mib|mp3|p10|patch|pdf|pppd|trc|txt|txt.gz|xls|xlsx|xml)$`)
 	if notPcapRe.FindString(fPath) != "" {
 		return fPath, fmt.Errorf("\033[92mINFO\033[0m Skipping download of non-pcap file %s from %s", fPath, urlStr)
 	}

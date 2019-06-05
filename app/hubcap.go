@@ -52,26 +52,24 @@ func main() {
 	cacheJSON := ds.NewDS()
 
 	links := html.GetAllLinks()
-	_, err := os.Stat(".cache")
-	if os.IsNotExist(err) {
-		fmt.Println("Creating cache folders...")
-		os.MkdirAll(".cache/packetlife", 0744)
-		os.MkdirAll(".cache/wireshark_bugs", 0744)
-		os.MkdirAll(".cache/wireshark_wiki", 0744)
-	} else { // If .cache/ folder doesn't exist, then .cache/captures.json won't either.
+	os.MkdirAll(".cache/packetlife", 0744)
+	os.MkdirAll(".cache/wireshark_bugs", 0744)
+	os.MkdirAll(".cache/wireshark_wiki", 0744)
+	_, err := os.Stat(".cache/captures.json")
+	if !os.IsNotExist(err) {
 		loadCache(links, cacheJSON)
 		for k, v := range cacheJSON.Cache {
 			resultJSON.Set(k, &v)
 		}
 	}
-	wg.Add(len(links))
 	for link, desc := range links {
 		for runtime.NumGoroutine() > goroutineLimit {
 			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
+		wg.Add(1)
 		go getPcapJSON(link, desc, resultJSON, &wg)
 	}
-	for runtime.NumGoroutine() > 5 {
+	for runtime.NumGoroutine() > 10 {
 		fmt.Printf("Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
 		time.Sleep(5 * time.Second)
 	}
@@ -129,7 +127,7 @@ func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGr
 		if isArchive {
 			getArchiveInfo(archiveFolder, &pi, result, wg)
 		} else {
-			getPcapInfo(&pi, result, wg) // No reason to be concurrent here
+			getPcapInfo(&pi, result) // No reason to be concurrent here
 		}
 	} else {
 		fmt.Println(twoLines(dlErr))
@@ -161,19 +159,21 @@ func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore,
 	} else {
 		for _, extractedName := range files {
 			pi.Filename = extractedName
-			wg.Add(1)
 			// Each pcap should have separate PcapInfo
 			newPi := pi
 			for runtime.NumGoroutine() > goroutineLimit {
 				time.Sleep(time.Duration(10) * time.Millisecond)
 			}
-			go getPcapInfo(newPi, result, wg)
-			wg.Done()
+			wg.Add(1)
+			go func(pi *ds.PcapInfo, result *ds.DataStore) {
+				getPcapInfo(pi, result)
+				wg.Done()
+			}(newPi, result)
 		}
 	}
 }
 
-func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
+func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore) {
 	relFileName := ".cache/" + strings.SplitN(pi.Filename, ".cache/", 2)[1]
 	var err error
 	err = pcap.IsPcap(pi.Filename)
@@ -198,7 +198,8 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
 			result.Set(fileHash, pi)
 		}
 	} else {
-		// If file is not a pcap, make a note of the link, but no more
+		// If file is not a pcap, make a note of the link and delete it
+		os.RemoveAll(pi.Filename)
 		newPi := ds.PcapInfo{Sources: pi.Sources, Description: "Captype reports this file as having a filetype of \"unknown\"."}
 		result.Set("->Error:CaptypeUnknown", &newPi)
 	}
