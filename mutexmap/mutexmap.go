@@ -48,6 +48,13 @@ func (ds *DataStore) Set(hash string, pi *PcapInfo) {
 	}
 }
 
+// DeleteFilename removes redundant capinfos filename
+func (ds *DataStore) DeleteFilename(hash string, pi *PcapInfo) {
+	ds.Lock()
+	defer ds.Unlock()
+	delete(ds.Cache[hash].Capinfos, "FileName")
+}
+
 // Add links to datastore object
 func (ds *DataStore) addSources(hash string, addend []string) {
 	temp := PcapInfo{

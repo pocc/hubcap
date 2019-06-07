@@ -110,7 +110,7 @@ func capinfos2JSON(text []byte) []byte {
 		case ' ':
 			// For `Interface #n` key value pairs
 			switch {
-			case text[index+1] == '=' && text[index+2] == ' ':
+			case readingInterfaces && text[index+1] == '=' && text[index+2] == ' ':
 				result = append(result, '"', ':', '"')
 				readingKey = false
 				index += 2
@@ -155,6 +155,8 @@ func capinfos2JSON(text []byte) []byte {
 				readingKey = true
 				readingNumericValue = false
 			}
+		case '"': // escape \ in text per JSON requirements
+			result = append(result, '\\', '"')
 		case '\\': // escape \ in text per JSON requirements
 			result = append(result, '\\', '\\')
 		default:
@@ -162,7 +164,9 @@ func capinfos2JSON(text []byte) []byte {
 			if !isDigitChar {
 				readingNumericValue = false
 			}
-			result = append(result, text[index])
+			if text[index] >= 32 { // There shouldn't be any control characters in JSON
+				result = append(result, text[index])
+			}
 		}
 		index++
 	}

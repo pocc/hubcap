@@ -44,14 +44,20 @@ var opts struct {
 	} `positional-args:"yes"`
 }*/
 
-var goroutineLimit = 100
+var goroutineLimit = 1000
 
 func main() {
 	var wg sync.WaitGroup
+	links := make(map[string]string)
+	cacheLinks := make([]string, 0)
 	resultJSON := ds.NewDS()
 	cacheJSON := ds.NewDS()
 
-	links := html.GetAllLinks()
+	// Each fn adds gathered links to existing map
+	// These calls are cheap, so always check if there are new PL/WS pcaps
+	//html.AddPacketlifeLinks(links)
+	html.AddWiresharkSampleLinks(links)
+
 	os.MkdirAll(".cache/packetlife", 0744)
 	os.MkdirAll(".cache/wireshark_bugs", 0744)
 	os.MkdirAll(".cache/wireshark_wiki", 0744)
@@ -60,8 +66,11 @@ func main() {
 		loadCache(links, cacheJSON)
 		for k, v := range cacheJSON.Cache {
 			resultJSON.Set(k, &v)
+			cacheLinks = append(cacheLinks, v.Sources...)
 		}
 	}
+	html.GetWsBugzillaLinks(cacheLinks, links)
+
 	for link, desc := range links {
 		for runtime.NumGoroutine() > goroutineLimit {
 			time.Sleep(time.Duration(10) * time.Millisecond)
@@ -69,10 +78,7 @@ func main() {
 		wg.Add(1)
 		go getPcapJSON(link, desc, resultJSON, &wg)
 	}
-	for runtime.NumGoroutine() > 10 {
-		fmt.Printf("Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
-		time.Sleep(5 * time.Second)
-	}
+	fmt.Printf("Waiting for %d goroutines to finish...\n", runtime.NumGoroutine())
 	wg.Wait() // All goroutines MUST complete before writing results
 
 	resultAndCacheDiffer := false
@@ -84,11 +90,21 @@ func main() {
 	}
 	if resultAndCacheDiffer {
 		addedPcapCount := len(resultJSON.Cache) - len(cacheJSON.Cache)
-		fmt.Printf("\n\033[92mINFO\033[0m Writing information about %d new files (%d total) to .cache/captures.json\n", addedPcapCount, len(resultJSON.Cache))
+		addedLinkCount := getLinkCount(resultJSON) - getLinkCount(cacheJSON)
+		fmt.Printf("\n\033[92mINFO\033[0m Writing information about %d/%d new links & %d/%d new files to .cache/captures.json\n",
+			addedLinkCount, getLinkCount(resultJSON), addedPcapCount, len(resultJSON.Cache))
 		writeJSON(resultJSON.Cache)
 	} else {
 		fmt.Println("\n\033[92mINFO\033[0m Skipping write: There are no new pcaps to add to captures.json")
 	}
+}
+
+func getLinkCount(cache *ds.DataStore) int {
+	count := 0
+	for _, v := range cache.Cache {
+		count += len(v.Sources)
+	}
+	return count
 }
 
 // Use the cache to skip analyzing pcaps that we have data on
@@ -118,6 +134,13 @@ func loadCache(allLinks map[string]string, cacheJSON *ds.DataStore) {
 }
 
 func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGroup) {
+	if desc == "Authorization Required" {
+		newPi := ds.PcapInfo{Sources: []string{link}, Description: "Bugzilla does not permit access for this file."}
+		result.Set("->Error:AuthorizationRequired", &newPi)
+		wg.Done()
+		return
+	}
+
 	pi := ds.PcapInfo{Sources: []string{link}, Description: desc}
 	var dlErr error
 	pi.Filename, dlErr = dl.FetchFile(link)
@@ -125,7 +148,7 @@ func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGr
 		archiveFolder := dl.StripArchiveExt(pi.Filename)
 		isArchive := archiveFolder != pi.Filename
 		if isArchive {
-			getArchiveInfo(archiveFolder, &pi, result, wg)
+			getArchiveInfo(archiveFolder, &pi, result)
 		} else {
 			getPcapInfo(&pi, result) // No reason to be concurrent here
 		}
@@ -143,9 +166,11 @@ func getPcapJSON(link string, desc string, result *ds.DataStore, wg *sync.WaitGr
 	wg.Done()
 }
 
-func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore, wg *sync.WaitGroup) {
+func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore) {
 	var files []string
 	var err error
+	var wg sync.WaitGroup
+	archiveHasPcaps := false
 	_, fileErr := os.Stat(archiveFolder)
 	isArchiveExtracted := !os.IsNotExist(fileErr)
 	if isArchiveExtracted {
@@ -167,9 +192,23 @@ func getArchiveInfo(archiveFolder string, pi *ds.PcapInfo, result *ds.DataStore,
 			wg.Add(1)
 			go func(pi *ds.PcapInfo, result *ds.DataStore) {
 				getPcapInfo(pi, result)
+				fd, _ := os.Stat(pi.Filename)
+				if fd != nil { // If it still exists, it will have been a pcap
+					archiveHasPcaps = true
+				}
 				wg.Done()
 			}(newPi, result)
 		}
+	}
+	wg.Wait()
+	if !archiveHasPcaps {
+		fmt.Println("\033[92mINFO\033[0m Deleting archive folder without pcaps:", archiveFolder)
+		delErr := os.RemoveAll(archiveFolder)
+		if delErr != nil {
+			fmt.Println("Problem with deleting archive without pcaps:", delErr)
+		}
+		newPi := ds.PcapInfo{Sources: pi.Sources, Description: "Captype reports this file as having a filetype of \"unknown\"."}
+		result.Set("->Error:CaptypeUnknown", &newPi)
 	}
 }
 
@@ -185,10 +224,10 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore) {
 			// Remove folder heirarchy
 			pi.Filename = relFileName
 			// Capinfos filename is redundant so remove it
-			delete(pi.Capinfos, "FileName")
 			// Primary key of JSON should be SHA256 of pcap if possible
 			fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
 			result.Set(fileHash, pi)
+			result.DeleteFilename(fileHash, pi)
 		}
 		if err != nil {
 			pi.ErrorStr = twoLines(err).Error()
@@ -198,8 +237,10 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore) {
 			result.Set(fileHash, pi)
 		}
 	} else {
+		fmt.Println(twoLines(err))
+		fmt.Println("\033[92mINFO\033[0m Deleting unused", pi.Filename)
 		// If file is not a pcap, make a note of the link and delete it
-		os.RemoveAll(pi.Filename)
+		os.Remove(pi.Filename)
 		newPi := ds.PcapInfo{Sources: pi.Sources, Description: "Captype reports this file as having a filetype of \"unknown\"."}
 		result.Set("->Error:CaptypeUnknown", &newPi)
 	}
@@ -212,6 +253,9 @@ func twoLines(err error) error {
 	if errBuf.Len() > 0 {
 		line2, _ := errBuf.ReadBytes('\n')
 		line = append(line, line2...)
+	}
+	if len(line) == 0 {
+		return fmt.Errorf("")
 	}
 	if line[len(line)-1] == '\n' { // remove newline at end
 		line = line[:len(line)-1]

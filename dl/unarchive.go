@@ -24,11 +24,6 @@ func UnarchivePcaps(archived string) ([]string, error) {
 	if archiveErr != nil {
 		return nil, fmt.Errorf("\033[93mWARN\033[0m Problem with archive %s.\nError: %s", archived, archiveErr)
 	}
-	delErr := os.Remove(archived)
-	if delErr != nil {
-		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem deleting archive `%s` "+
-			"(Do you have permissions?).\nERROR: %s", archived, delErr)
-	}
 	files, err := WalkArchive(folderName)
 	if err != nil {
 		return nil, fmt.Errorf("\033[91mERROR\033[0m Could not read archive directory %s", folderName)
@@ -36,6 +31,12 @@ func UnarchivePcaps(archived string) ([]string, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("\033[93mWARN\033[0m Archive %s had no pcaps", archived)
 	}
+	delErr := os.Remove(archived)
+	if delErr != nil {
+		return nil, fmt.Errorf("\033[91mERROR\033[0m Problem deleting archive `%s` "+
+			"(Do you have permissions?).\nERROR: %s", archived, delErr)
+	}
+	fmt.Println("\033[92mINFO\033[0m Deleted archive file", archived)
 	return files, nil
 }
 

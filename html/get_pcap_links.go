@@ -8,16 +8,17 @@ import (
 	"math/rand"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-type downloadLink struct {
-	link        string
-	description string
-	filename    string
+// LinkCache is concurrent safe way to store links
+type LinkCache struct {
+	sync.Mutex
+	Cache map[string]string
 }
 
 // Get the ASCII html string from a URL
@@ -29,11 +30,11 @@ func getHTML(pageURL string) string {
 		time.Sleep(5 * time.Second)
 		return getHTML(pageURL)
 	}
-	defer resp.Body.Close()
 	siteHTML, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("ERROR: Failed to read html from `"+pageURL+"`", err)
 	}
+	resp.Body.Close()
 	return html.UnescapeString(string(siteHTML))
 }
 
@@ -63,70 +64,99 @@ func getPlCapPages(wg *sync.WaitGroup) []string {
 	return pageUrls
 }
 
-// Wireshark bugzilla attachments are sequential, but not all are pcaps
-func getWsBugzillaLinks(allLinks map[string]string) {
-	var wg sync.WaitGroup
+// GetWsBugzillaLinks gets wireshark bugzilla attachments, which are sequential, but not all are pcaps
+func GetWsBugzillaLinks(cachedLinks []string, allLinks map[string]string) {
+	linkCache := LinkCache{Cache: make(map[string]string)}
+	idRe := regexp.MustCompile(`id=(.*?)(?:&|$)`)
+	index := 1
+	numCached := 0
+	haveCachedAttachment := make([]bool, 20000)
+	for _, link := range cachedLinks {
+		results := idRe.FindStringSubmatch(link)
+		if len(results) > 0 {
+			num, err := strconv.Atoi(results[1])
+			if err != nil {
+				fmt.Println("Unable to convert string to int", err)
+			}
+			haveCachedAttachment[num] = true
+			numCached++
+		}
+	}
 	done := make(chan bool)
 	backoff := make(chan bool)
-	index := 1
-	for {
+	backoffSwitch := false
+	for index < 20000 {
+		if haveCachedAttachment[index] {
+			index++
+			continue
+		}
+		if backoffSwitch {
+			fmt.Printf("Backing off for 2 seconds.\n")
+			time.Sleep(time.Duration(2) * time.Second)
+			backoffSwitch = false
+		}
 		select {
 		case <-done:
-			wg.Wait() // Wait for all Bugzilla crawlers
-			return
+			fmt.Printf("Waiting for %d goroutines to finish\n", runtime.NumGoroutine())
+			index = 20000 // Just hardcode to max for the time being
 		case <-backoff:
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(time.Duration(1000) * time.Millisecond)
+			backoffSwitch = true
 		default:
-			wg.Add(1)
-			go getBugzillaHTML(index, 200, allLinks, &wg, backoff, done)
+			go getBugzillaHTML(index, 200, &linkCache, backoff, done)
 			time.Sleep(500 * time.Millisecond)
 			index++
 		}
 	}
+	for link, desc := range linkCache.Cache {
+		allLinks[link] = desc
+	}
 }
 
-func getBugzillaHTML(index int, delay int, allLinks map[string]string, wg *sync.WaitGroup, backoff chan<- bool, done chan<- bool) {
-	defer wg.Done()
+func getBugzillaHTML(index int, delay int, linkCache *LinkCache, backoff chan<- bool, done chan<- bool) {
 	var description, filename string
 	baseURL := "https://bugs.wireshark.org/bugzilla/attachment.cgi?id="
 	descRe := regexp.MustCompile(`<title>([\s\S]*?)<\/title>(?:[\s\S]*?<div class=\"details\">(.*?) \()?`)
 	indexStr := strconv.Itoa(index)
 	pageHTML := getHTML(baseURL + indexStr + "&action=edit")
 	attachmentDetails := descRe.FindAllStringSubmatch(pageHTML, -1)
-	if len(attachmentDetails) == 0 {
-		fmt.Println("ERROR: Regex failed in unexpected way for", pageHTML, "on index", index)
+	if len(attachmentDetails) == 0 || len(attachmentDetails[0]) == 0 {
+		fmt.Println("ERROR: Regex failed in unexpected way for", pageHTML, "on index", index, ". Skipping...")
+		return
 	}
-	if len(attachmentDetails[0]) == 0 {
-		fmt.Println("ERROR: Failed to parse HTML for", pageHTML, "on index", index)
-	} else {
-		description = attachmentDetails[0][1]
-		description = strings.Replace(description, "\n ", "", -1)
-		switch description {
-		case "Invalid Attachment ID": // Quit once attachment number is invalid
+	description = attachmentDetails[0][1]
+	description = strings.Replace(description, "\n ", "", -1)
+	description = strings.TrimSpace(description)
+	switch description {
+	case "Invalid Attachment ID": // Quit once attachment number is invalid
+		fmt.Printf("\033[93mWARN\033[0m Invalid Attachment ID found for %s. Skipping...\n", baseURL+indexStr)
+		if index != 15252 && index != 15253 { // Weird invalid attachments in middle of list, not at end
 			done <- true
-			return
-		case "Authorization Required": // Skip pulling files that don't exist
-			return
-		case "bugs.wireshark.org | 525: SSL handshake failed": // Wait and retry
-			rand.New(rand.NewSource(time.Now().UnixNano()))
-			randNum := rand.Int() % 2000
-			newDelay := delay*4 + randNum
-			time.Sleep(time.Duration(newDelay) * time.Millisecond)
-			wg.Add(1)
-			fmt.Println("\033[93mWARN\033[0m ", indexStr+": SSL handshake failed. Retrying in", newDelay, "ms")
-			getBugzillaHTML(index, newDelay, allLinks, wg, backoff, done)
-		default:
-			filename = attachmentDetails[0][2]
-			filename = strings.Replace(filename, " ", "_", -1)
-			// filename is not needed in request, but provides filename for parser down the line
-			allLinks[baseURL+indexStr+"&name="+filename] = description
 		}
+	case "Authorization Required": // Skip pulling files that don't exist
+		fmt.Printf("\033[93mWARN\033[0m Authorization Required for viewing %s. Skipping...\n", baseURL+indexStr)
+		linkCache.Lock()
+		linkCache.Cache[baseURL+indexStr] = "Authorization Required"
+		linkCache.Unlock()
+	case "bugs.wireshark.org | 525: SSL handshake failed": // Wait and retry
+		rand.New(rand.NewSource(time.Now().UnixNano()))
+		newDelay := delay*4 + rand.Int()%2000
+		fmt.Println("\033[93mWARN\033[0m ", indexStr+": SSL handshake failed. Retrying in", newDelay, "ms")
+		backoff <- true
+	default:
+		filename = attachmentDetails[0][2]
+		filename = strings.Replace(filename, " ", "_", -1)
+		// filename is not needed in request, but provides filename for parser down the line
+		linkCache.Lock()
+		linkCache.Cache[baseURL+indexStr+"&name="+filename] = description
+		linkCache.Unlock()
 	}
 }
 
 // addCaptureLinks gets links/descs provided an html string and regex to find them
 func addCaptureLinks(baseURL string, siteHTML string, linkReStr string, allLinks map[string]string) {
 	// Get capture group match (partial link) and add it to link list
+	linkCache := LinkCache{Cache: make(map[string]string)}
 	emptyRe := regexp.MustCompile(`(^[\s.]*$|<span class)`)
 	linkRe := regexp.MustCompile(linkReStr)
 	noDescTitleRe := regexp.MustCompile(`(<br>\s*<\/strong>Description:? ?<strong>|^\s*[-;:]?\s*)`)
@@ -146,14 +176,40 @@ func addCaptureLinks(baseURL string, siteHTML string, linkReStr string, allLinks
 		// Some links are to view the download instead of getting it
 		link = strings.Replace(link, "&do=view", "&do=get", -1)
 		desc = noDescTitleRe.ReplaceAllString(desc, "")
+		linkCache.Lock()
+		linkCache.Cache[link] = desc
+		linkCache.Unlock()
+	}
+	for link, desc := range linkCache.Cache {
 		allLinks[link] = desc
 	}
 }
 
-// GetAllLinks gets all of the pcap download links from various websites
-func GetAllLinks() map[string]string {
-	links := make(map[string]string)
+// AddWiresharkSampleLinks gets all of the pcap download links from the Wireshark Sample Captures
+func AddWiresharkSampleLinks(links map[string]string) {
 	var wg sync.WaitGroup
+	numInitialLinks := len(links)
+	start := time.Now()
+
+	// From Wireshark Sample Captures, provided by the community
+	wsCapURL := "https://wiki.wireshark.org"
+	wsSampleURL := wsCapURL + "/SampleCaptures"
+	wsSampleHTML := getHTML(wsSampleURL)
+	wsAppendixLinksRe := `Appendix\" title=\"[^"]*\" href=\"([^"]*)\"()`
+	addCaptureLinks(wsCapURL, wsSampleHTML, wsAppendixLinksRe, links)
+	// It looks like this HTML was written by hand (i.e. harder to use regex)
+	// If a link is found both in appendix and in pagetext, overwrite with link that has description
+	wsLinkWithDescRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
+	addCaptureLinks(wsCapURL, wsSampleHTML, wsLinkWithDescRe, links)
+
+	wg.Wait()
+	fmt.Printf("-> Fetched 1 page containing %d links in %s\n", len(links)-numInitialLinks, time.Since(start))
+}
+
+// AddPacketlifeLinks gets all of the pcap download links from PacketLife
+func AddPacketlifeLinks(links map[string]string) {
+	var wg sync.WaitGroup
+	numInitialLinks := len(links)
 	start := time.Now()
 
 	// From Packet Life
@@ -169,22 +225,7 @@ func GetAllLinks() map[string]string {
 		}(pageURL)
 	}
 
-	// From Wireshark Sample Captures, provided by the community
-	wsCapURL := "https://wiki.wireshark.org"
-	wsSampleURL := wsCapURL + "/SampleCaptures"
-	wsSampleHTML := getHTML(wsSampleURL)
-	wsAppendixLinksRe := `Appendix\" title=\"[^"]*\" href=\"([^"]*)\"()`
-	addCaptureLinks(wsCapURL, wsSampleHTML, wsAppendixLinksRe, links)
-	// It looks like this HTML was written by hand (i.e. harder to use regex)
-	// If a link is found both in appendix and in pagetext, overwrite with link that has description
-	wsLinkWithDescRe := `<a class="attachment" href="(\/SampleCaptures[^"]+?)"[\s\S]+?(?:<\/s[\s\S]*?867">|<\/a> ??)([\s\S]+?)\s*(?:<span class|File:<strong> )`
-	addCaptureLinks(wsCapURL, wsSampleHTML, wsLinkWithDescRe, links)
-
-	// From Wireshark Bugzilla, add all links found
-	// getWsBugzillaLinks(links)
-
 	wg.Wait()
 	numPages := len(plPageUrls) + 1
-	fmt.Printf("-> Fetched %d pages containing %d links in %s\n", numPages, len(links), time.Since(start))
-	return links
+	fmt.Printf("-> Fetched %d page containing %d links in %s\n", numPages, len(links)-numInitialLinks, time.Since(start))
 }

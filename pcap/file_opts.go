@@ -13,22 +13,22 @@ import (
 )
 
 // IsPcap returns whether Wireshark recognizes the file as a capture
+// Capinfos' StrictTimeOrder (-o) being detected is most predictive of being pcap
 func IsPcap(filepath string) error {
-	cmd := exec.Command("captype", filepath)
+	cmd := exec.Command("capinfos", "-c", "-o", filepath)
 	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
 	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("\033[91mERROR\033[0m captype failed: %s when parsing filepath %s", err, filepath)
+	if err != nil && !strings.Contains(string(stderr.Bytes()), "cut short in the middle of a packet") {
+		return fmt.Errorf("\033[91mERROR\033[0m captype failed: %s when parsing filepath %s.\n%s", err, filepath, string(stderr.Bytes()))
 	}
-	// capinfos output like `/path/to/file.pcap: pcap\n`
-	stdout.ReadBytes(' ')
-	fileType := string(stdout.Bytes())
-	// get rid of trailing newline
-	fileType = fileType[:len(fileType)-1]
-	// *shark can read .gz, but not most compression/archive formats
-	if fileType == "unknown" {
-		return fmt.Errorf("\033[93mWARN\033[0m captype: %s is not a recognized capture", filepath)
+	outputStr := string(stdout.Bytes())
+	isPcap := strings.Contains(outputStr, "Strict time order:   False") || strings.Contains(outputStr, "Strict time order:   True")
+	hasZeroPackets := strings.Contains(outputStr, "Number of packets:   0") // K12 files can be packet captures but also have no packets
+	if !isPcap || hasZeroPackets {
+		return fmt.Errorf(outputStr)
 	}
 	return nil
 }
