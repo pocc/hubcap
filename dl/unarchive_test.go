@@ -19,7 +19,7 @@ func TestUnarchivePcaps(t *testing.T) {
 		wantErr bool
 	}{
 		{"Non-archive should fail", args{".gitignore"}, nil, true},
-		{"Actual archive should return with filenames", args{"../test/files/empty.tar.gz"}, []string{"empty", "empty2"}, false},
+		{"Archive with no pcaps", args{"../test/files/empty.tar.gz"}, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,11 +50,11 @@ func TestStripArchiveExt(t *testing.T) {
 		args args
 		want string
 	}{
-		{".tar", args{"ws_w-I.bz2"}, "ws_w-I"},
-		{".bz2", args{"ws_w-I.pcap.tgz"}, "ws_w-I"},
+		{".tar", args{"ws_w-I.tar"}, "ws_w-I"},
+		{".bz2", args{"ws_w-I.bz2"}, "ws_w-I"},
 		{".ntar.gz", args{"ws_w-I.ntar.gz"}, "ws_w-I"},
 		{".tar.gz", args{"ws_w-I.tar.gz"}, "ws_w-I"},
-		{".tgz", args{"ws_w-I.pcap.tgz"}, "ws_w-I"},
+		{".tgz", args{"ws_w-I.tgz"}, "ws_w-I"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

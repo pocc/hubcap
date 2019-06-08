@@ -14,7 +14,7 @@ func TestFetchFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("Not able to determine current directory")
 	}
-	target := dir[:len(dir)-3] + "/.cache/ws_" + testFile
+	target := dir[:len(dir)-3] + "/.cache/wireshark_wiki/" + testFile
 	type args struct {
 		url string
 	}
@@ -57,7 +57,7 @@ func Test_getFilepathFromURL(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"Typical pcap", args{wiresharkBase + testFile}, baseFileStr + "ws_" + testFile, false},
+		{"Typical pcap", args{wiresharkBase + testFile}, baseFileStr + "wireshark_wiki/" + testFile, false},
 		{"Bad URL", args{""}, "", true},
 	}
 	for _, tt := range tests {
