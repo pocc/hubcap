@@ -37,8 +37,8 @@ func GetTsharkInfo(filename string, filter string, fields ...string) ([]byte, er
 	cmd.Stderr = stderr
 	err := cmd.Run()
 	if err != nil {
-		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m %s", err.Error())
-		return []byte(err.Error()), tsharkErr
+		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m tshark error: %s", err.Error())
+		return stdout.Bytes(), tsharkErr
 	}
 	if len(stderr.Bytes()) > 0 {
 		// This is not a fatal error because it's ok if some files are not read
@@ -46,8 +46,12 @@ func GetTsharkInfo(filename string, filter string, fields ...string) ([]byte, er
 		if errorText[0] == '\n' {
 			errorText = errorText[1:]
 		}
-		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m tshark: %s", errorText)
-		return stderr.Bytes(), tsharkErr
+		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m tshark stderr: %s", errorText)
+		return stdout.Bytes(), tsharkErr
+	}
+	if len(stdout.Bytes()) == 0 {
+		tsharkErr := fmt.Errorf("\033[93mWARN\033[0m tshark: No output captured! Command: tshark %s", cmdList)
+		return stdout.Bytes(), tsharkErr
 	}
 	return stdout.Bytes(), nil
 }
@@ -62,8 +66,12 @@ func GetTsharkJSON(filename string) ([]string, map[string][]int, error) {
 // parseProtoAndPorts parses just frame.protocols, udp.port, tcp.port
 func parseProtoAndPorts(text []byte) ([]string, map[string][]int) {
 	ports := make(map[string][]int)
-	protoRe := regexp.MustCompile(`(?:^|\n)(\S*?)\|(\d*?),?(\d*?)\|(\d*?),?(\d*?)`)
+	protoRe := regexp.MustCompile(`(?:^|\n)(\S*?)\|(\d*),?(\d*).*?\|(\d*),?(\d*).*?`)
 	protoData := protoRe.FindAllStringSubmatch(string(text), -1)
+	if protoData == nil {
+		fmt.Println("\033[91mERROR\033[0m For given text,", string(text), ", unable to parse protocols and ports with regex")
+		os.Exit(1)
+	}
 	rotatedData := make([][]string, 5)
 	for i := 0; i < 5; i++ {
 		rotatedData[i] = make([]string, len(protoData))

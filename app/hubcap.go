@@ -55,7 +55,7 @@ func main() {
 
 	// Each fn adds gathered links to existing map
 	// These calls are cheap, so always check if there are new PL/WS pcaps
-	//html.AddPacketlifeLinks(links)
+	html.AddPacketlifeLinks(links)
 	html.AddWiresharkSampleLinks(links)
 
 	os.MkdirAll(".cache/packetlife", 0744)
@@ -219,23 +219,18 @@ func getPcapInfo(pi *ds.PcapInfo, result *ds.DataStore) {
 	if err == nil {
 		// TODO fix should be a command line option and available as an option
 		pi.Capinfos, err = pcap.GetCapinfos(pi.Filename, false)
-		if err == nil {
-			pi.Protocols, pi.Ports, err = pcap.GetTsharkJSON(pi.Filename)
-			// Remove folder heirarchy
-			pi.Filename = relFileName
-			// Capinfos filename is redundant so remove it
-			// Primary key of JSON should be SHA256 of pcap if possible
-			fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
-			result.Set(fileHash, pi)
-			result.DeleteFilename(fileHash, pi)
-		}
+		pi.Protocols, pi.Ports, err = pcap.GetTsharkJSON(pi.Filename)
 		if err != nil {
-			pi.ErrorStr = twoLines(err).Error()
-			fmt.Println(twoLines(err))
-			pi.Filename = relFileName
-			fileHash := pcap.GetSHA256(pi.Filename)
-			result.Set(fileHash, pi)
+			fmt.Println(err.Error())
+			pi.ErrorStr = err.Error()
 		}
+		// Remove folder heirarchy
+		pi.Filename = relFileName
+		// Capinfos filename is redundant so remove it
+		// Primary key of JSON should be SHA256 of pcap if possible
+		fileHash := fmt.Sprintf("%s", pi.Capinfos["SHA256"])
+		result.Set(fileHash, pi)
+		result.DeleteFilename(fileHash, pi)
 	} else {
 		fmt.Println(twoLines(err))
 		fmt.Println("\033[92mINFO\033[0m Deleting unused", pi.Filename)
@@ -266,6 +261,7 @@ func twoLines(err error) error {
 	return fmt.Errorf("%s", line)
 }
 
+// writeJSON writes all data to a `captures.json` file.
 func writeJSON(resultJSON map[string]ds.PcapInfo) {
 	// UTF escape codes require extra attention per https://stackoverflow.com/questions/24656624
 	jsonBuf := new(bytes.Buffer)
@@ -289,3 +285,6 @@ func writeJSON(resultJSON map[string]ds.PcapInfo) {
 		fmt.Println("Filepath:", jsonPath)
 	}
 }
+
+// writeHTML takes an HTML template and writes to a `captures.html` file.
+func writeHTML() {}

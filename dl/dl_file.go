@@ -13,7 +13,7 @@ import (
 
 func downloadFile(url string, filepath string, retryMillisec int) error {
 	// Create the file
-	time.Sleep(time.Duration(retryMillisec) * time.Second)
+	time.Sleep(time.Duration(retryMillisec) * time.Millisecond)
 	var contextStr string
 
 	// Get the data

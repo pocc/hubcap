@@ -21,6 +21,8 @@ func GetCapinfos(filename string, shouldFix bool) (map[string]interface{}, error
 	cmd.Run()
 	stderrStr := string(stderr.Bytes())
 	willFix := shouldFix && strings.Contains(stderrStr, "cut short in the middle")
+	ciJSON := capinfos2JSON(stdout.Bytes())
+	result := JSON2Struct(ciJSON)
 	switch {
 	case willFix:
 		fixPcap(filename)
@@ -29,16 +31,14 @@ func GetCapinfos(filename string, shouldFix bool) (map[string]interface{}, error
 		capinfosErr := fmt.Errorf("\033[93mWARN\033[0m " + stderrStr)
 		errorResult := make(map[string]interface{})
 		errorResult[filename] = "File not found"
-		return errorResult, capinfosErr
+		return result, capinfosErr
 	case bytes.Equal(stdout.Bytes(), []byte("")):
 		fmt.Println("\033[91mERROR\033[0m FATAL: No output received from capinfos for file", filename,
 			"\nThis usually means that there are too many goroutines.",
 			"\nCurrent number of goroutines:", runtime.NumGoroutine())
 		os.Exit(1)
 	}
-
-	ciJSON := capinfos2JSON(stdout.Bytes())
-	return JSON2Struct(ciJSON), nil
+	return result, nil
 }
 
 // JSON2Struct converts a capinfos struct to a JSON
